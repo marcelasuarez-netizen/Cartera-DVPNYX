@@ -1,9 +1,3 @@
-¡Claro que sí! Es una métrica fundamental para entender el volumen de trabajo administrativo del periodo. He actualizado la sección de Gestión Detallada para incluir un quinto indicador que muestra exactamente cuántas facturas se emitieron bajo los filtros seleccionados (País, Año, Mes y Cliente).
-
-Aquí tienes el Código Maestro Final actualizado para tu archivo app.py en GitHub:
-
-Python
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -21,12 +15,13 @@ def cargar_datos_completos(id_file):
     url = f"https://docs.google.com/spreadsheets/d/{id_file}/export?format=xlsx"
     try:
         response = requests.get(url)
+        # Cargamos todas las hojas en un diccionario de DataFrames
         return pd.read_excel(io.BytesIO(response.content), sheet_name=None, engine='openpyxl')
     except Exception as e:
         st.error(f"Error de conexión: {e}")
         return None
 
-# Mapeo de meses para el desplegable
+# Nombres de meses para el desplegable
 MESES_NOMBRES = {
     1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 
     5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto", 
@@ -44,6 +39,7 @@ if datos_excel:
     hojas_excluir = ['Dashboard', 'Hoja 2', 'Hoja 4', 'altabix', 'ALTABIX', 'Instrucciones']
     hojas_paises = [h for h in datos_excel.keys() if h not in hojas_excluir]
     
+    # Tasas de cambio de referencia
     TASAS_REF = {"COP": 4000, "MXN": 18.5, "GTQ": 7.8, "USD": 1}
     hoy = datetime.now()
 
@@ -51,9 +47,12 @@ if datos_excel:
     resumen_global = []
     for p in hojas_paises:
         df_p = datos_excel[p].copy()
+        
+        # Limpieza de cabecera si es necesario
         if 'Total' not in df_p.columns and 'TOTAL' not in df_p.columns:
             df_p.columns = df_p.iloc[0]
             df_p = df_p[1:].reset_index(drop=True)
+        
         df_p.columns = [str(c).strip() for c in df_p.columns]
         
         c_tot = next((c for c in df_p.columns if c.upper() == 'TOTAL'), 'Total')
@@ -62,11 +61,15 @@ if datos_excel:
 
         if c_tot in df_p.columns:
             df_p[c_tot] = pd.to_numeric(df_p[c_tot], errors='coerce').fillna(0)
+            
+            # Identificar si está cobrado
             def es_cobrado(row):
                 txt = str(row.get(c_est, "")).upper()
                 return "CRUCE" in txt or "PAGADA" in txt or pd.notnull(row.get('Fecha de Pago'))
             
             df_p['Es_Cobrado'] = df_p.apply(es_cobrado, axis=1)
+            
+            # Moneda y Conversión
             moneda = str(df_p[c_mon].iloc[0]).upper() if c_mon and not df_p.empty else "USD"
             tasa = TASAS_REF.get(moneda, 1)
             
@@ -88,7 +91,7 @@ if datos_excel:
 
     st.markdown("---")
 
-    # --- 5. DETALLE POR PAÍS CON TODOS LOS FILTROS ---
+    # --- 5. DETALLE POR PAÍS CON FILTROS ---
     st.sidebar.header("Filtros Detallados")
     pais_sel = st.sidebar.selectbox("🚩 1. Seleccionar País:", hojas_paises)
     
@@ -104,14 +107,14 @@ if datos_excel:
     col_cli = next((c for c in df_sel.columns if c in ['Cliente', 'NOMBRE', 'Nombre Receptor']), 'Cliente')
     col_tot = next((c for c in df_sel.columns if c.upper() == 'TOTAL'), 'Total')
     col_ser = next((c for c in df_sel.columns if c.upper() in ['SERVICIO', 'SERVICIO ']), 'Servicio')
-    col_ven = next((c for c in df_sel.columns if 'vencimiento' in c.lower()), None)
+    col_ven = next((c for c in df_sel.columns if 'vencimiento' in c.lower() or 'Vencimiento' in c), None)
     col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado', 'Estado de pago']), 'Cartera')
 
     # Filtro de Año
     if col_año in df_sel.columns:
         df_sel[col_año] = pd.to_numeric(df_sel[col_año], errors='coerce').fillna(0).astype(int)
-        años = ["Todos"] + sorted(list(df_sel[df_sel[col_año]>0][col_año].unique()), reverse=True)
-        año_f = st.sidebar.selectbox("📅 2. Seleccionar Año:", años)
+        años_opt = ["Todos"] + sorted(list(df_sel[df_sel[col_año]>0][col_año].unique()), reverse=True)
+        año_f = st.sidebar.selectbox("📅 2. Seleccionar Año:", años_opt)
         if año_f != "Todos": df_sel = df_sel[df_sel[col_año] == año_f]
 
     # Filtro de Mes
@@ -125,11 +128,11 @@ if datos_excel:
             df_sel = df_sel[df_sel[col_mes] == mes_id_sel]
 
     # Filtro de Cliente
-    clientes = ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique()))
-    cli_f = st.sidebar.selectbox("👤 4. Seleccionar Cliente:", clientes)
+    clientes_opt = ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique()))
+    cli_f = st.sidebar.selectbox("👤 4. Seleccionar Cliente:", clientes_opt)
     if cli_f != "Todos": df_sel = df_sel[df_sel[col_cli] == cli_f]
 
-    # Clasificación final
+    # Clasificación de Estados
     def clasificar_final(row):
         txt = str(row.get(col_car, "")).upper()
         if "CRUCE" in txt: return "🟠 CRUCE DE CUENTAS"
@@ -145,32 +148,30 @@ if datos_excel:
     # --- GESTIÓN DETALLADA (KPIs) ---
     st.header(f"Gestión Detallada: {pais_sel}")
     
-    # Cálculo de Rotación Local
     v_loc = df_sel[col_tot].sum()
     p_loc = df_sel[df_sel['Estado_Final'].isin(["🔴 EN MORA", "🟢 AL DÍA"])][col_tot].sum()
     dso_l = (p_loc / v_loc * 360) if v_loc > 0 else 0
 
-    # MÉTRICAS CON INDICADOR DE CANTIDAD DE FACTURAS
     k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Cartera Local Total", f"$ {df_sel[col_tot].sum():,.0f}")
-    k2.metric("En Mora", f"$ {df_sel[df_sel['Estado_Final']=='🔴 EN MORA'][col_tot].sum():,.0f}", delta="Riesgo", delta_color="inverse")
+    k1.metric("Cartera Local", f"$ {v_loc:,.0f}")
+    k2.metric("En Mora", f"$ {df_sel[df_sel['Estado_Final']=='🔴 EN MORA'][col_tot].sum():,.0f}", delta_color="inverse")
     k3.metric("Recaudado/Cruce", f"$ {df_sel[df_sel['Estado_Final'].isin(['🔵 PAGADA', '🟠 CRUCE DE CUENTAS'])][col_tot].sum():,.0f}")
-    k4.metric("Rotación (DSO)", f"{dso_l:.0f} Días")
-    k5.metric("Facturas Emitidas", f"{len(df_sel)} Und", help="Cantidad de facturas emitidas en el periodo y filtros seleccionados")
+    k4.metric("DSO (Días)", f"{dso_l:.0f} Días")
+    k5.metric("Facturas Emitidas", f"{len(df_sel)} Und")
 
     st.markdown("---")
     
-    # GRÁFICOS
+    # Gráficos
     c_d1, c_d2 = st.columns(2)
     with c_d1:
-        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.4, title="Estado Financiero (Monto)",
+        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.4, title="Estado Financiero",
                                color='Estado_Final', color_discrete_map={"🔵 PAGADA": "#2980B9", "🔴 EN MORA": "#C0392B", "🟠 CRUCE DE CUENTAS": "#E67E22", "🟢 AL DÍA": "#27AE60", "🟣 NOTA CRÉDITO": "#8E44AD"}), use_container_width=True)
     with c_d2:
         if col_ser in df_sel.columns:
             st.plotly_chart(px.bar(df_sel[col_ser].value_counts().reset_index(), x='count', y=col_ser, orientation='h', color='count', color_continuous_scale='Greens', title="Mix de Facturación por Servicio"), use_container_width=True)
 
-    st.subheader("Maestro de Facturación (Detalle)")
+    st.subheader("Maestro de Facturación Analizado")
     st.dataframe(df_sel[[col_cli, col_ser, col_tot, 'Estado_Final']].sort_values(by=col_tot, ascending=False))
 
 else:
-    st.error("No se pudo conectar con el Drive. Revisa los permisos del archivo."
+    st.error("Error al conectar con el Drive. Revisa los permisos del archivo.")
