@@ -1,10 +1,3 @@
-¡Claro que sí! He integrado el filtro por Mes en la barra lateral, manteniendo absolutamente todas las funciones que hemos construido: la conexión a Google Drive, la conversión a USD, los indicadores de Rotación (DSO), la exclusión de Altabix, y la gráfica de Servicios.
-
-Ahora, cuando selecciones un año, el desplegable de meses se actualizará para mostrarte solo los meses que tienen facturas registradas en ese periodo.
-
-Código Maestro Actualizado (app.py)
-Python
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
