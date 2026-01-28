@@ -6,7 +6,7 @@ import requests
 import io
 
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
-ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN"
+ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN" 
 
 st.set_page_config(page_title="Dashboard Cartera Global DVP-NYX", layout="wide")
 
@@ -17,108 +17,159 @@ def cargar_toda_la_cartera(id_file):
         response = requests.get(url)
         return pd.read_excel(io.BytesIO(response.content), sheet_name=None, engine='openpyxl')
     except Exception as e:
-        st.error(f"Error de conexión: {e}")
+        st.error(f"Error de conexión con Drive: {e}")
         return None
 
-# --- 2. CARGA DE DATOS ---
+# --- 2. CARGA Y FILTROS INICIALES ---
 datos_excel = cargar_toda_la_cartera(ID_DRIVE)
 
 if datos_excel:
-    # Excluimos hojas técnicas y específicamente ALTABIX
+    # Excluir Altabix y hojas basura
     hojas_excluir = ['Dashboard', 'Hoja 2', 'Hoja 4', 'altabix', 'ALTABIX', 'Instrucciones']
     hojas_paises = [h for h in datos_excel.keys() if h not in hojas_excluir]
-
-    st.title("🌎 Dashboard de Cartera Consolidado (USD)")
-    st.markdown("---")
-
-    # --- 3. LÓGICA DE CONVERSIÓN A USD (ANÁLISIS GLOBAL) ---
-    resumen_global = []
+    
+    TASAS_REF = {"COP": 4000, "MXN": 18.5, "GTQ": 7.8, "USD": 1}
     hoy = datetime.now()
 
-    # Tasas de cambio de referencia (puedes ajustarlas aquí o el código las toma del Excel si existen)
-    TASAS_DEFAULT = {"COP": 3950, "MXN": 17.5, "GTQ": 7.8, "USD": 1}
-
-    for pais in hojas_paises:
-        df_temp = datos_excel[pais].copy()
-        
-        # Limpieza rápida de cabeceras
-        if 'Total' not in df_temp.columns and 'TOTAL' not in df_temp.columns:
-            df_temp.columns = df_temp.iloc[0]
-            df_temp = df_temp[1:].reset_index(drop=True)
-        
-        df_temp.columns = [str(c).strip() for c in df_temp.columns]
-        
-        # Mapeo de columnas
-        col_t = next((c for c in df_temp.columns if c.upper() == 'TOTAL'), None)
-        col_v = next((c for c in df_temp.columns if 'vencimiento' in c.lower()), None)
-        col_tc = next((c for c in df_temp.columns if 'Cambio' in c or 'TRM' in c), None)
-        col_mon = next((c for c in df_temp.columns if 'Moneda' in c), None)
-        col_est = next((c for c in df_temp.columns if c in ['Cartera', 'Estado', 'Estado de pago']), 'Estado')
-
-        if col_t and col_v:
-            df_temp[col_t] = pd.to_numeric(df_temp[col_t], errors='coerce').fillna(0)
-            df_temp[col_v] = pd.to_datetime(df_temp[col_v], errors='coerce')
-            
-            # Identificar Mora
-            df_mora = df_temp[df_temp[col_v] < hoy].copy()
-            # Excluir las ya pagadas o cruzadas
-            if col_est in df_mora.columns:
-                df_mora = df_mora[~df_mora[col_est].str.contains("PAGADA|Cruce|NC", case=False, na=False)]
-            
-            total_local = df_mora[col_t].sum()
-            
-            # Obtener Tasa de Cambio
-            tasa = 1
-            moneda = str(df_temp[col_mon].iloc[0]).upper() if col_mon and not df_temp.empty else "USD"
-            
-            if col_tc and not df_temp.empty:
-                tasa_val = pd.to_numeric(df_temp[col_tc], errors='coerce').median()
-                tasa = tasa_val if tasa_val > 0 else TASAS_DEFAULT.get(moneda, 1)
-            else:
-                tasa = TASAS_DEFAULT.get(moneda, 1)
-            
-            # Convertir a USD
-            total_usd = total_local / tasa if tasa != 0 else total_local
-            resumen_global.append({"País": pais, "Mora USD": total_usd})
-
-    df_global_usd = pd.DataFrame(resumen_global)
-
-    # --- 4. VISUALIZACIÓN GLOBAL ---
-    st.subheader("⚠️ Resumen de Mora por País (Equivalente en USD)")
-    
-    if not df_global_usd.empty:
-        c1, c2 = st.columns([2, 1])
-        with c1:
-            fig_global = px.bar(df_global_usd.sort_values("Mora USD", ascending=False), 
-                                x="País", y="Mora USD", 
-                                text_auto='.2s',
-                                title="Deuda en Mora Consolidada (Dólares)",
-                                color="Mora USD", color_continuous_scale="Reds")
-            st.plotly_chart(fig_global, use_container_width=True)
-        
-        with c2:
-            total_mora_region = df_global_usd["Mora USD"].sum()
-            st.metric("Total Mora Regional", f"USD {total_mora_region:,.2f}")
-            st.info("Nota: Los valores de COP, MXN y GTQ han sido convertidos a USD usando la tasa de cambio de la factura o promedio del mercado.")
-    
+    st.title("🌎 Dashboard de Cartera 360: Global, Mora y Rotación")
     st.markdown("---")
 
-    # --- 5. DETALLE POR PAÍS SELECCIONADO ---
-    st.sidebar.header("Detalle Individual")
-    pais_sel = st.sidebar.selectbox("🚩 Seleccionar País para ver facturas:", hojas_paises)
+    # --- 3. PROCESAMIENTO GLOBAL (USD Y ROTACIÓN) ---
+    resumen_global = []
     
-    # Aquí reutilizamos tu lógica anterior para el detalle del país
-    df_pais = datos_excel[pais_sel].copy()
-    if 'Total' not in df_pais.columns and 'TOTAL' not in df_pais.columns:
-        df_pais.columns = df_pais.iloc[0]
-        df_pais = df_pais[1:].reset_index(drop=True)
+    for p in hojas_paises:
+        df_p = datos_excel[p].copy()
+        
+        # Limpieza de cabecera dinámica
+        if 'Total' not in df_p.columns and 'TOTAL' not in df_p.columns:
+            df_p.columns = df_p.iloc[0]
+            df_p = df_p[1:].reset_index(drop=True)
+        
+        df_p.columns = [str(c).strip() for c in df_p.columns]
+        
+        # Mapeo
+        c_tot = next((c for c in df_p.columns if c.upper() == 'TOTAL'), 'Total')
+        c_ven = next((c for c in df_p.columns if 'vencimiento' in c.lower()), None)
+        c_mon = next((c for c in df_p.columns if 'Moneda' in c), None)
+        c_est = next((c for c in df_p.columns if c in ['Cartera', 'Estado', 'Estado de pago']), 'Estado')
+
+        if c_tot in df_p.columns:
+            df_p[c_tot] = pd.to_numeric(df_p[c_tot], errors='coerce').fillna(0)
+            
+            # Clasificación de estados para cálculo
+            def clasificar_global(row):
+                txt = str(row.get(c_est, "")).upper()
+                if "CRUCE" in txt or "PAGADA" in txt or pd.notnull(row.get('Fecha de Pago')):
+                    return "COBRADO"
+                return "PENDIENTE"
+
+            df_p['Status_G'] = df_p.apply(clasificar_global, axis=1)
+            
+            # Conversión USD
+            moneda = str(df_p[c_mon].iloc[0]).upper() if c_mon and not df_p.empty else "USD"
+            tasa = TASAS_REF.get(moneda, 1)
+            
+            ventas_totales_usd = df_p[c_tot].sum() / tasa
+            cartera_pendiente_usd = df_p[df_p['Status_G']=="PENDIENTE"][c_tot].sum() / tasa
+            
+            # Rotación (DSO) = (Cartera / Ventas) * 360
+            rotacion = (cartera_pendiente_usd / ventas_totales_usd * 360) if ventas_totales_usd > 0 else 0
+            
+            resumen_global.append({
+                "País": p, 
+                "Mora_USD": cartera_pendiente_usd, 
+                "Rotacion_Dias": rotacion,
+                "Ventas_USD": ventas_totales_usd
+            })
+
+    df_g = pd.DataFrame(resumen_global)
+
+    # --- 4. SECCIÓN GLOBAL (GRÁFICAS EN USD Y ROTACIÓN) ---
+    col1, col2 = st.columns(2)
     
-    df_pais.columns = [str(c).strip() for c in df_pais.columns]
-    col_t_p = next((c for c in df_pais.columns if c.upper() == 'TOTAL'), 'Total')
-    col_c_p = next((c for c in df_pais.columns if c in ['Cliente', 'NOMBRE', 'Nombre Receptor']), 'Cliente')
+    with col1:
+        st.subheader("⚠️ Mora Consolidada (USD)")
+        fig_mora = px.bar(df_g.sort_values("Mora_USD", ascending=False), 
+                          x="País", y="Mora_USD", text_auto='.2s', color="Mora_USD",
+                          color_continuous_scale="Reds")
+        st.plotly_chart(fig_mora, use_container_width=True)
+
+    with col2:
+        st.subheader("🔄 Rotación de Cartera (Días DSO)")
+        fig_rot = px.bar(df_g.sort_values("Rotacion_Dias"), 
+                         x="País", y="Rotacion_Dias", text_auto='.0f',
+                         title="Días que tardamos en cobrar por país",
+                         color="Rotacion_Dias", color_continuous_scale="Blues_r")
+        st.plotly_chart(fig_rot, use_container_width=True)
+
+    st.markdown("---")
+
+    # --- 5. DETALLE POR PAÍS (SOLICITUDES ANTERIORES) ---
+    st.sidebar.header("Filtros de Detalle")
+    pais_sel = st.sidebar.selectbox("🚩 Seleccionar País:", hojas_paises)
     
-    st.subheader(f"Facturación Detallada: {pais_sel}")
-    st.dataframe(df_pais[[col_c_p, col_t_p]].head(10))
+    df_sel = datos_excel[pais_sel].copy()
+    if 'Total' not in df_sel.columns and 'TOTAL' not in df_sel.columns:
+        df_sel.columns = df_sel.iloc[0]
+        df_sel = df_sel[1:].reset_index(drop=True)
+    df_sel.columns = [str(c).strip() for c in df_sel.columns]
+
+    # Mapeo Dinámico
+    col_año = next((c for c in df_sel.columns if c.upper() == 'AÑO'), 'Año')
+    col_cli = next((c for c in df_sel.columns if c in ['Cliente', 'NOMBRE', 'Nombre Receptor']), 'Cliente')
+    col_tot = next((c for c in df_sel.columns if c.upper() == 'TOTAL'), 'Total')
+    col_ser = next((c for c in df_sel.columns if c.upper() in ['SERVICIO', 'CONCEPTO']), 'Servicio')
+    col_ven = next((c for c in df_sel.columns if 'vencimiento' in c.lower()), None)
+    col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado', 'Estado de pago']), 'Cartera')
+
+    # Filtros Año y Cliente
+    if col_año in df_sel.columns:
+        df_sel[col_año] = pd.to_numeric(df_sel[col_año], errors='coerce').fillna(0).astype(int)
+        año_f = st.sidebar.selectbox("📅 Año:", ["Todos"] + sorted(list(df_sel[df_sel[col_año]>0][col_año].unique()), reverse=True))
+        if año_f != "Todos": df_sel = df_sel[df_sel[col_año] == año_f]
+
+    cli_f = st.sidebar.selectbox("👤 Cliente Global:", ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique())))
+    if cli_f != "Todos": df_sel = df_sel[df_sel[col_cli] == cli_f]
+
+    # Lógica de Estados Completa
+    def clasificar_completo(row):
+        txt = str(row.get(col_car, "")).upper()
+        if "CRUCE" in txt: return "🟠 CRUCE DE CUENTAS"
+        if "NC" in txt: return "🟣 NOTA CRÉDITO"
+        if "PAGADA" in txt or pd.notnull(row.get('Fecha de Pago')): return "🔵 PAGADA"
+        f_v = pd.to_datetime(row.get(col_ven), errors='coerce')
+        if pd.isnull(f_v): return "⚪ SIN FECHA"
+        return "🔴 EN MORA" if f_v < hoy else "🟢 AL DÍA"
+
+    df_sel['Estado_Final'] = df_sel.apply(clasificar_completo, axis=1)
+    df_sel[col_tot] = pd.to_numeric(df_sel[col_tot], errors='coerce').fillna(0)
+
+    # Dashboard de País
+    st.header(f"Gestión: {pais_sel} | Cliente: {cli_f}")
+    
+    # Cálculo de Rotación por Cliente si se selecciona uno
+    ventas_cli = df_sel[col_tot].sum()
+    cartera_cli = df_sel[df_sel['Estado_Final'].isin(["🔴 EN MORA", "🟢 AL DÍA"])][col_tot].sum()
+    rot_cli = (cartera_cli / ventas_cli * 360) if ventas_cli > 0 else 0
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Cartera Total", f"$ {df_sel[col_tot].sum():,.0f}")
+    k2.metric("Monto en Mora", f"$ {df_sel[df_sel['Estado_Final']=='🔴 EN MORA'][col_tot].sum():,.0f}", delta="Riesgo")
+    k3.metric("Recaudado/Cruce", f"$ {df_sel[df_sel['Estado_Final'].isin(['🔵 PAGADA', '🟠 CRUCE DE CUENTAS'])][col_total].sum() if 'col_total' in locals() else 0:,.0f}")
+    k4.metric("Rotación (Días DSO)", f"{rot_cli:.0f} Días")
+
+    c_p1, c_p2 = st.columns(2)
+    with c_p1:
+        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.4, 
+                               color='Estado_Final', color_discrete_map={
+                                   "🔵 PAGADA": "#2980B9", "🔴 EN MORA": "#C0392B", 
+                                   "🟠 CRUCE DE CUENTAS": "#E67E22", "🟢 AL DÍA": "#27AE60", "⚪ SIN FECHA": "#BDC3C7"
+                               }), use_container_width=True)
+    with c_p2:
+        st.plotly_chart(px.bar(df_sel[col_ser].value_counts().reset_index(), x='count', y=col_ser, orientation='h', title="Mix de Servicios"), use_container_width=True)
+
+    st.subheader("Maestro de Facturación")
+    st.dataframe(df_sel[[col_cli, col_ser, col_tot, 'Estado_Final']])
 
 else:
-    st.error("No se pudo cargar la información desde Google Drive. Revisa los permisos.")
+    st.error("Error al conectar con Google Drive. Revisa permisos.")
