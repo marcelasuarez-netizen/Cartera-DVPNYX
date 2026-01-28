@@ -5,62 +5,67 @@ from datetime import datetime
 import requests
 import io
 
-# --- CONFIGURACIÓN DE CONEXIÓN ---
-# 1. PEGA AQUÍ TU ID (el código largo de tu enlace de Drive)
-ID_DRIVE = "https://docs.google.com/spreadsheets/d/1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN/edit?usp=sharing&ouid=105747081974090957408&rtpof=true&sd=true" 
+# --- CONFIGURACIÓN CON TU ID REAL ---
+ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN" 
 
-st.set_page_config(page_title="Dashboard DVP Global", layout="wide")
+st.set_page_config(page_title="Dashboard Cartera DVP-NYX", layout="wide")
 
 @st.cache_data(ttl=300)
-def descargar_excel_drive(id_archivo):
-    # Intentamos primero como archivo de Excel subido (.xlsx)
-    url_directa = f"https://drive.google.com/uc?export=download&id={id_archivo}"
-    # Si eso falla (porque es un Google Sheet nativo), usamos el link de exportación
-    url_export = f"https://docs.google.com/spreadsheets/d/{id_archivo}/export?format=xlsx"
-    
-    sesion = requests.Session()
-    
+def cargar_excel_dvp(id_file):
+    # Enlace de exportación forzada para archivos de Google Drive
+    url = f"https://docs.google.com/spreadsheets/d/{id_file}/export?format=xlsx"
     try:
-        # Intento 1: Descarga directa
-        respuesta = sesion.get(url_directa, stream=True)
-        # Si Google pide confirmación de virus, buscamos el token
-        if "confirm=" in respuesta.text:
-            token = [v for k, v in respuesta.cookies.items() if k.startswith("download_warning")][0]
-            respuesta = sesion.get(url_directa + f"&confirm={token}", stream=True)
-        
-        # Si el contenido parece HTML (error), intentamos el método de exportación
-        if "html" in respuesta.headers.get('Content-Type', '').lower():
-            respuesta = sesion.get(url_export)
-            
-        return pd.ExcelFile(io.BytesIO(respuesta.content), engine='openpyxl')
+        response = requests.get(url)
+        # Usamos openpyxl para leer el contenido binario
+        return pd.ExcelFile(io.BytesIO(response.content), engine='openpyxl')
     except Exception as e:
-        st.error(f"Error de conexión: {e}")
+        st.error(f"Error al conectar con Drive: {e}")
         return None
 
-# --- INICIO DE LA APP ---
-st.title("📊 Control de Cartera DVP & NYX")
+st.title("📊 Control de Cartera Global DVP-NYX")
 
-if ID_DRIVE == "TU_ID_AQUÍ":
-    st.warning("⚠️ Por favor, pon el ID de tu archivo de Drive en el código (línea 11).")
+excel_obj = cargar_excel_dvp(ID_DRIVE)
+
+if excel_obj:
+    # Filtramos las hojas para mostrar solo los países
+    hojas_ignorar = ['Dashboard', 'Hoja 2', 'Hoja 4', 'Instrucciones']
+    paises = [h for h in excel_obj.sheet_names if h not in hojas_ignorar]
+    
+    st.sidebar.header("Filtros")
+    pais_sel = st.sidebar.selectbox("Selecciona un País:", paises)
+
+    # Cargamos la hoja del país seleccionado
+    # Saltamos la primera fila si es necesario (tus archivos suelen tener el título en la fila 1)
+    df = pd.read_excel(excel_obj, sheet_name=pais_sel, skiprows=1, engine='openpyxl')
+    
+    # Limpiar nombres de columnas
+    df.columns = df.columns.str.strip()
+
+    # Identificar columnas clave (ajustado a tus pestañas como 'DVP Colombia' o 'DVP Ecuador')
+    col_cliente = next((c for c in df.columns if c in ['Cliente', 'NOMBRE', 'Nombre Receptor']), 'Cliente')
+    col_total = next((c for c in df.columns if c.upper() == 'TOTAL'), 'Total')
+    col_vence = next((c for c in df.columns if 'vencimiento' in c.lower() or 'Vencimiento' in c), None)
+    col_estado = next((c for c in df.columns if 'Cartera' in c or 'Estado' in c), 'Cartera')
+
+    # Convertir total a número
+    df[col_total] = pd.to_numeric(df[col_total], errors='coerce').fillna(0)
+
+    # Mostrar KPIs rápidos
+    st.subheader(f"Resumen de Cartera: {pais_sel}")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.metric("Monto Total Facturado", f"$ {df[col_total].sum():,.2f}")
+    with c2:
+        recaudado = df[df[col_estado].str.contains("PAGADA|Cruce", case=False, na=False)][col_total].sum()
+        st.metric("Monto Recaudado", f"$ {recaudado:,.2f}")
+
+    # Gráfico de pastel
+    fig = px.pie(df, values=col_total, names=col_estado, title="Distribución de Estados de Pago", hole=0.4)
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Tabla Detallada
+    st.write("### Detalle de Facturación")
+    st.dataframe(df[[col_cliente, col_total, col_estado]].sort_values(by=col_total, ascending=False))
+
 else:
-    excel_obj = descargar_excel_drive(ID_DRIVE)
-
-    if excel_obj:
-        # Filtrar pestañas reales
-        hojas = [h for h in excel_obj.sheet_names if h not in ['Dashboard', 'Hoja 2', 'Hoja 4']]
-        pais_sel = st.sidebar.selectbox("🚩 Seleccionar País:", hojas)
-
-        # Leer datos de la hoja
-        df = pd.read_excel(excel_obj, sheet_name=pais_sel, engine='openpyxl')
-        
-        # Si la tabla tiene filas vacías arriba, las saltamos
-        if 'Total' not in df.columns and 'TOTAL' not in df.columns:
-            df = pd.read_excel(excel_obj, sheet_name=pais_sel, skiprows=1, engine='openpyxl')
-
-        df.columns = df.columns.str.strip()
-        
-        # --- (Aquí sigue el resto de tu lógica de gráficos que ya tenemos) ---
-        st.success(f"Datos de {pais_sel} cargados correctamente.")
-        st.dataframe(df.head())
-    else:
-        st.error("❌ No se pudo leer el archivo. Revisa que el ID sea correcto y el archivo sea PÚBLICO.")
+    st.error("No se pudo cargar el archivo. Verifica que en Google Drive esté como 'Cualquier persona con el enlace puede ver'.")
