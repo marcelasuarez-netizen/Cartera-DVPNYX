@@ -27,7 +27,7 @@ MESES_NOMBRES = {
 }
 
 # --- 2. CARGA DE DATOS ---
-st.title("📊 Control de Facturación: Auditoría y Cartera Global")
+st.title("📊 Dashboard Financiero Global: Formato de Finanzas")
 st.markdown("---")
 
 datos_excel = cargar_datos_completos(ID_DRIVE)
@@ -72,14 +72,20 @@ if datos_excel:
     # --- 4. VISTA CONSOLIDADA ---
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        st.plotly_chart(px.bar(df_global.sort_values("Mora_USD", ascending=False), x="País", y="Mora_USD", text_auto='.2s', color="Mora_USD", color_continuous_scale="Reds", title="Riesgo: Mora en USD por País"), use_container_width=True)
+        st.plotly_chart(px.bar(df_global.sort_values("Mora_USD", ascending=False), 
+                               x="País", y="Mora_USD", text_auto=',.2f', 
+                               color="Mora_USD", color_continuous_scale="Reds", 
+                               title="Mora en USD por País"), use_container_width=True)
     with col_g2:
-        st.plotly_chart(px.bar(df_global.sort_values("DSO_Dias"), x="País", y="DSO_Dias", text_auto='.0f', color="DSO_Dias", color_continuous_scale="Blues_r", title="Eficiencia: Días de Rotación (DSO)"), use_container_width=True)
+        st.plotly_chart(px.bar(df_global.sort_values("DSO_Dias"), 
+                               x="País", y="DSO_Dias", text_auto='.0f', 
+                               color="DSO_Dias", color_continuous_scale="Blues_r", 
+                               title="Días de Rotación (DSO)"), use_container_width=True)
 
     st.markdown("---")
 
     # --- 5. DETALLE POR PAÍS Y FILTROS ---
-    st.sidebar.header("Configuración de Filtros")
+    st.sidebar.header("Filtros")
     pais_sel = st.sidebar.selectbox("🚩 1. Seleccionar País:", hojas_paises)
     
     df_sel = datos_excel[pais_sel].copy()
@@ -112,7 +118,7 @@ if datos_excel:
     cli_f = st.sidebar.selectbox("👤 4. Seleccionar Cliente:", clientes)
     if cli_f != "Todos": df_sel = df_sel[df_sel[col_cli] == cli_f]
 
-    # --- CLASIFICACIÓN SOLICITADA ---
+    # --- CLASIFICACIÓN ---
     def clasificar_auditoria(row):
         txt = str(row.get(col_car, "")).upper()
         if "NC" in txt: return "NC"
@@ -122,11 +128,9 @@ if datos_excel:
     def clasificar_financiero(row):
         audit = clasificar_auditoria(row)
         if audit != "VIGENTE": return audit
-        
         txt = str(row.get(col_car, "")).upper()
         if "CRUCE" in txt: return "🟠 CRUCE DE CUENTAS"
         if "PAGADA" in txt or pd.notnull(row.get('Fecha de Pago')): return "🔵 PAGADA"
-        
         f_v = pd.to_datetime(row.get(col_ven), errors='coerce')
         if pd.isnull(f_v): return "⚪ SIN FECHA"
         return "🔴 EN MORA" if f_v < hoy else "🟢 AL DÍA"
@@ -135,44 +139,49 @@ if datos_excel:
     df_sel['Estado_Final'] = df_sel.apply(clasificar_financiero, axis=1)
     df_sel[col_tot] = pd.to_numeric(df_sel[col_tot], errors='coerce').fillna(0)
 
-    # --- KPIs ---
+    # --- KPIs CON FORMATO FINANCIERO ---
     st.header(f"Gestión Detallada: {pais_sel}")
     k1, k2, k3, k4, k5 = st.columns(5)
     v_loc = df_sel[col_tot].sum()
     p_loc = df_sel[df_sel['Estado_Final'].isin(["🔴 EN MORA", "🟢 AL DÍA"])][col_tot].sum()
     dso_l = (p_loc / v_loc * 360) if v_loc > 0 else 0
-    k1.metric("Cartera Local", f"$ {v_loc:,.0f}")
-    k2.metric("En Mora", f"$ {df_sel[df_sel['Estado_Final']=='🔴 EN MORA'][col_tot].sum():,.0f}")
-    k3.metric("Recaudado/Cruce", f"$ {df_sel[df_sel['Estado_Final'].isin(['🔵 PAGADA', '🟠 CRUCE DE CUENTAS'])][col_tot].sum():,.0f}")
+    
+    # Formato financiero: comas miles, punto decimales (ej: 1,234.56)
+    k1.metric("Cartera Local", f"$ {v_loc:,.2f}")
+    k2.metric("En Mora", f"$ {df_sel[df_sel['Estado_Final']=='🔴 EN MORA'][col_tot].sum():,.2f}")
+    k3.metric("Recaudado/Cruce", f"$ {df_sel[df_sel['Estado_Final'].isin(['🔵 PAGADA', '🟠 CRUCE DE CUENTAS'])][col_tot].sum():,.2f}")
     k4.metric("DSO (Días)", f"{dso_l:.0f}")
-    k5.metric("Emitidas", f"{len(df_sel)} Und")
+    k5.metric("Emitidas", f"{len(df_sel):,d}")
 
     st.markdown("---")
     
     # --- GRÁFICAS ---
     c1, c2, c3 = st.columns(3)
     with c1:
-        # Gráfica de Cartera (Monto)
-        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.4, title="Estado por Monto ($)",
+        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.4, 
+                               title="Cartera por Monto",
                                color='Estado_Final', color_discrete_map={
                                    "🔵 PAGADA": "#2980B9", "🔴 EN MORA": "#C0392B", 
                                    "🟠 CRUCE DE CUENTAS": "#E67E22", "🟢 AL DÍA": "#27AE60", 
                                    "NC": "#8E44AD", "ANULADA": "#34495E"}), use_container_width=True)
     with c2:
-        # NUEVA GRÁFICA DE AUDITORÍA (SOLICITADA: ANULADA, NC, VIGENTE)
         df_audit = df_sel['Estado_Auditoria'].value_counts().reset_index()
         fig_audit = px.bar(df_audit, x='count', y='Estado_Auditoria', orientation='h', 
-                           title="Auditoría: Tipo de Documento",
-                           labels={'count': 'Cantidad', 'Estado_Auditoria': 'Tipo'},
+                           text_auto=',d', title="Auditoría: Cantidad de Facturas",
                            color='Estado_Auditoria', color_discrete_map={
                                "NC": "#8E44AD", "ANULADA": "#34495E", "VIGENTE": "#27AE60"})
         st.plotly_chart(fig_audit, use_container_width=True)
     with c3:
         if col_ser in df_sel.columns:
-            st.plotly_chart(px.bar(df_sel[col_ser].value_counts().reset_index(), x='count', y=col_ser, orientation='h', color_continuous_scale='Greens', title="Mix por Servicio"), use_container_width=True)
+            st.plotly_chart(px.bar(df_sel[col_ser].value_counts().reset_index(), 
+                                   x='count', y=col_ser, orientation='h', text_auto=',d',
+                                   color_continuous_scale='Greens', title="Mix por Servicio"), use_container_width=True)
 
-    st.subheader("Listado Maestro de Facturación")
-    st.dataframe(df_sel[[col_cli, col_ser, col_tot, 'Estado_Final']].sort_values(by=col_tot, ascending=False))
+    st.subheader("Maestro de Facturación Analizado")
+    # Formatear tabla: Total con coma de miles y punto decimal
+    st.dataframe(df_sel[[col_cli, col_ser, col_tot, 'Estado_Final']]
+                 .sort_values(by=col_tot, ascending=False)
+                 .style.format({col_tot: "{:,.2f}"}))
 
 else:
     st.error("Error al conectar con el Drive.")
