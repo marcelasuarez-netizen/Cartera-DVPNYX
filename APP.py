@@ -1,15 +1,3 @@
-¡Entendido! He ajustado el código para que los números en las tarjetas de métricas sean físicamente más pequeños (mediante CSS) y el formato sea más compacto. De esta manera, aunque las cifras sean grandes, cabrán perfectamente en la pantalla y el diseño se verá mucho más limpio y balanceado sobre el fondo azul claro.
-
-Cambios de diseño aplicados:
-Reducción de fuente: El tamaño de los números en los KPIs ahora es más sutil para que no saturen la vista.
-
-Tarjetas más compactas: Ajustamos el espaciado para que la información se vea agrupada y profesional.
-
-Visualización Optimizada: Mantenemos el fondo azul claro y las gráficas integradas sin bordes bruscos.
-
-Código Maestro para tu APP.py en GitHub:
-Python
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -22,13 +10,12 @@ ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN"
 
 st.set_page_config(page_title="Dashboard Cartera DVP-NYX 360", layout="wide")
 
-# --- ESTILO CSS PERSONALIZADO (Fondo Azul y Números más Pequeños) ---
+# --- ESTILO CSS PERSONALIZADO (Fondo Azul y Números Pequeños para Finanzas) ---
 st.markdown("""
     <style>
     .stApp {
         background-color: #e3f2fd; /* Azul claro suave */
     }
-    /* Estilo para las tarjetas de métricas */
     [data-testid="stMetric"] {
         background-color: #ffffff;
         padding: 10px 15px;
@@ -36,15 +23,14 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         border: 1px solid #bbdefb;
     }
-    /* Reducir el tamaño de los números de los KPIs */
+    /* Tamaño de fuente reducido para valores financieros */
     [data-testid="stMetricValue"] {
-        font-size: 1.4rem !important; /* Tamaño reducido para mejor visualización */
+        font-size: 1.3rem !important; 
         color: #1565c0;
         font-weight: 700;
     }
-    /* Reducir el tamaño de las etiquetas de los KPIs */
     [data-testid="stMetricLabel"] {
-        font-size: 0.85rem !important;
+        font-size: 0.8rem !important;
         color: #546e7a;
     }
     h1, h2, h3 {
@@ -70,7 +56,7 @@ MESES_NOMBRES = {
 }
 
 # --- 2. CARGA DE DATOS ---
-st.title("📊 Dashboard Financiero Global: Análisis de Cartera")
+st.title("📊 Dashboard Financiero Global: Auditoría y Cartera")
 st.markdown("---")
 
 datos_excel = cargar_datos_completos(ID_DRIVE)
@@ -98,6 +84,7 @@ if datos_excel:
 
         if c_tot in df_p.columns:
             df_p[c_tot] = pd.to_numeric(df_p[c_tot], errors='coerce').fillna(0)
+            
             def es_mora_global(row):
                 txt = str(row.get(c_est, "")).upper()
                 if any(x in txt for x in ["NC", "ANULADA", "CANCELADO"]): return False
@@ -121,7 +108,11 @@ if datos_excel:
     # --- 4. VISTA CONSOLIDADA ---
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        fig_cg = px.bar(df_global.sort_values("Cartera_Global_USD", ascending=False), x="País", y="Cartera_Global_USD", text_auto=',.0f', title="Cartera Global (USD)")
+        # Gráfica de Cartera Global solicitada
+        fig_cg = px.bar(df_global.sort_values("Cartera_Global_USD", ascending=False), 
+                        x="País", y="Cartera_Global_USD", text_auto=',.0f', 
+                        title="Cartera Total por País (USD)", color="País", 
+                        color_discrete_sequence=px.colors.qualitative.Prism)
         fig_cg.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_cg, use_container_width=True)
     with col_g2:
@@ -184,8 +175,8 @@ if datos_excel:
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
     df_sel[col_tot] = pd.to_numeric(df_sel[col_tot], errors='coerce').fillna(0)
 
-    # --- KPIs AJUSTADOS (Más Pequeños) ---
-    st.header(f"Gestión: {pais_sel}")
+    # --- KPIs AJUSTADOS ---
+    st.header(f"Gestión Detallada: {pais_sel}")
     k1, k2, k3, k4, k5 = st.columns(5)
     
     v_vig = df_sel[df_sel['Estado_Final'].isin(["🔴 EN MORA", "🟢 AL DÍA", "🔵 PAGADA", "🟠 CRUCE"])][col_tot].sum()
@@ -209,7 +200,6 @@ if datos_excel:
         fig_p.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_p, use_container_width=True)
     with c2:
-        # Gráfica Auditoría (Cantidad)
         df_a = df_sel.apply(cls_audit, axis=1).value_counts().reset_index()
         fig_a = px.bar(df_a, x='count', y='index', orientation='h', title="Documentos (Cant)",
                        color='index', color_discrete_map={"NC": "#8e24aa", "ANULADA": "#757575", "VIGENTE": "#43a047"})
