@@ -99,7 +99,7 @@ if datos_excel:
     st.markdown("---")
 
     df_global = pd.DataFrame(resumen_global)
-    # Conversión a miles para las gráficas de barra
+    # Conversión a miles
     df_global['Venta_K'] = df_global['Venta_Total_USD'] / 1000
     df_global['Saldo_K'] = df_global['Saldo_USD'] / 1000
 
@@ -107,19 +107,20 @@ if datos_excel:
 
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        # Gráfica 1: Ventas en USD (en miles)
-        fig_venta = px.bar(df_global, x="País", y="Venta_K", text_auto='.1f', 
+        # Gráfica 1: Ventas en USD (Corregida)
+        fig_venta = px.bar(df_global, x="País", y="Venta_K", 
                            title="Ventas en USD", color="País", color_discrete_map=color_map_paises)
-        fig_venta.update_traces(textsuffix=' K')
-        fig_venta.update_layout(yaxis_title="Miles de USD")
+        # Usamos texttemplate para formatear el número y añadir la K
+        fig_venta.update_traces(texttemplate='%{y:.1f} K', textposition='outside')
+        fig_venta.update_layout(template="plotly_white", yaxis_title="Miles de USD", showlegend=False)
         st.plotly_chart(fig_venta, use_container_width=True)
         
     with col_g2:
-        # Gráfica 2: Saldo Pendiente (en miles)
-        fig_saldo = px.bar(df_global, x="País", y="Saldo_K", text_auto='.1f', 
+        # Gráfica 2: Saldo Pendiente (Corregida)
+        fig_saldo = px.bar(df_global, x="País", y="Saldo_K", 
                            title="Saldo Pendiente Externo (USD)", color_discrete_sequence=['#e53935'])
-        fig_saldo.update_traces(textsuffix=' K')
-        fig_saldo.update_layout(yaxis_title="Miles de USD")
+        fig_saldo.update_traces(texttemplate='%{y:.1f} K', textposition='outside')
+        fig_saldo.update_layout(template="plotly_white", yaxis_title="Miles de USD")
         st.plotly_chart(fig_saldo, use_container_width=True)
 
     st.markdown("---")
