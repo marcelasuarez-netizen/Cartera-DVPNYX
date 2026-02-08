@@ -28,6 +28,14 @@ st.markdown("""
         text-transform: capitalize; 
     }
     h1, h2, h3 { color: #0d47a1; text-transform: none; }
+    .resumen-neteado {
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #0d47a1;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin-top: 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -89,29 +97,22 @@ if datos_excel:
 
     df_global = pd.DataFrame(resumen_global)
     
-    # --- AJUSTE DE COLOR PARA GUATEMALA ---
-    # Definimos colores fijos para evitar que use rojo en Guatemala
     color_map = {
-        "GUATEMALA": "#4DD0E1",  # Celeste/Azul suave
-        "COLOMBIA": "#1565C0",   # Azul fuerte
-        "MEXICO": "#43A047",     # Verde
-        "ECUADOR": "#FFB300",    # Amarillo/Naranja
-        "USA": "#5E35B1"         # Morado
+        "GUATEMALA": "#4DD0E1",
+        "COLOMBIA": "#1565C0",
+        "MEXICO": "#43A047",
+        "ECUADOR": "#FFB300",
+        "USA": "#5E35B1"
     }
 
     col_g1, col_g2 = st.columns(2)
     with col_g1:
         fig_venta = px.bar(df_global, x="País", y="Venta_Total_USD", text_auto=',.0f', 
-                           title="Venta Externa (USD)", color="País",
-                           color_discrete_map=color_map)
-        fig_venta.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)')
+                           title="Venta Externa (USD)", color="País", color_discrete_map=color_map)
         st.plotly_chart(fig_venta, use_container_width=True)
-        
     with col_g2:
-        # En la gráfica de saldos mantenemos el rojo porque representa deuda/pendiente
         st.plotly_chart(px.bar(df_global, x="País", y="Saldo_USD", text_auto=',.0f', 
-                               title="Saldo Pendiente Externo (USD)", 
-                               color_discrete_sequence=['#e53935']).update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+                               title="Saldo Pendiente Externo (USD)", color_discrete_sequence=['#e53935']), use_container_width=True)
 
     st.markdown("---")
 
@@ -130,6 +131,7 @@ if datos_excel:
     col_tot = next((c for c in df_sel.columns if c.upper() == 'TOTAL'), 'Total')
     col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado', 'Estado de pago', 'Estatus']), 'Cartera')
     col_ven = next((c for c in df_sel.columns if 'vencimiento' in str(c).lower() or 'Vencimiento' in str(c)), None)
+    col_mon = next((c for c in df_sel.columns if 'Moneda' in c), None)
     
     col_año = next((c for c in df_sel.columns if 'AÑO' in c.upper()), None)
     col_mes = next((c for c in df_sel.columns if 'MES' in c.upper()), None)
@@ -167,8 +169,18 @@ if datos_excel:
     
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
 
+    # --- CÁLCULOS GESTIÓN DETALLADA ---
     subtotal_total = df_sel[col_sub].sum()
     valor_nc_subtotal = abs(df_sel[df_sel['Estado_Final'] == "NC"][col_sub].sum())
+    
+    # Venta Neteada Subtotal (Local)
+    venta_neteada_local = subtotal_total - valor_nc_subtotal
+    
+    # Conversión a USD para el cuadrito final
+    tasa_actual = TASAS_REF.get(str(df_sel[col_mon].iloc[0]).upper() if col_mon and not df_sel.empty else "USD", 1)
+    venta_neteada_usd = venta_neteada_local / tasa_actual
+    venta_neteada_usd_miles = venta_neteada_usd / 1000
+
     saldo_p = df_sel[col_sal].sum()
     df_vigentes_solo = df_sel[~df_sel['Estado_Final'].isin(["Anulada", "NC"])]
     iva_vigente = df_vigentes_solo[col_iva].sum()
@@ -178,15 +190,11 @@ if datos_excel:
     
     r1c1, r1c2, r1c3, r1c4 = st.columns(4)
     r1c1.metric("Subtotal", f"$ {subtotal_total:,.2f}")
-    
     with r1c2:
-        st.markdown(f"""
-            <div style="background-color: white; padding: 10px; border-radius: 10px; border: 1px solid #bbdefb; height: 100%;">
-                <p style="color: #546e7a; font-size: 0.75rem; margin: 0; text-transform: capitalize;">Notas crédito</p>
-                <p style="color: #d32f2f; font-size: 1.1rem; font-weight: 700; margin: 0;">- $ {valor_nc_subtotal:,.2f}</p>
-            </div>
-        """, unsafe_allow_html=True)
-    
+        st.markdown(f"""<div style="background-color: white; padding: 10px; border-radius: 10px; border: 1px solid #bbdefb; height: 100%;">
+            <p style="color: #546e7a; font-size: 0.75rem; margin: 0; text-transform: capitalize;">Notas crédito</p>
+            <p style="color: #d32f2f; font-size: 1.1rem; font-weight: 700; margin: 0;">- $ {valor_nc_subtotal:,.2f}</p>
+        </div>""", unsafe_allow_html=True)
     r1c3.metric("Saldo pendiente", f"$ {saldo_p:,.2f}")
     r1c4.metric("Monto en mora", f"$ {df_sel[df_sel['Estado_Final']=='🔴 En mora'][col_sal].sum():,.2f}")
 
@@ -199,16 +207,28 @@ if datos_excel:
     
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera Externa por Estado ($)", color='Estado_Final', color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "Anulada": "#757575", "NC": "#8e24aa"}).update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera Externa por Estado ($)", color='Estado_Final', color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "Anulada": "#757575", "NC": "#8e24aa"}), use_container_width=True)
     with c2:
         df_audit = df_sel['Estado_Final'].apply(lambda x: x if x in ["NC", "Anulada"] else "Vigente").value_counts().reset_index()
         df_audit.columns = ['Tipo', 'Cantidad']
-        st.plotly_chart(px.bar(df_audit, x='Cantidad', y='Tipo', orientation='h', title="Auditoría: Tipo de Documento", color='Tipo', color_discrete_map={"NC": "#8e24aa", "Anulada": "#757575", "Vigente": "#43a047"}).update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=False), use_container_width=True)
+        st.plotly_chart(px.bar(df_audit, x='Cantidad', y='Tipo', orientation='h', title="Auditoría: Tipo de Documento", color='Tipo', color_discrete_map={"NC": "#8e24aa", "Anulada": "#757575", "Vigente": "#43a047"}), use_container_width=True)
 
     st.subheader("Listado Maestro (Externos)")
     col_ser = next((c for c in df_sel.columns if c.upper() in ['SERVICIO', 'SERVICIO ']), 'Servicio')
     cols_f = [col_cli, col_ser, col_sub, col_iva, col_tot, col_sal, 'Estado_Final']
     st.dataframe(df_sel[cols_f].sort_values(by=col_sal, ascending=False).style.format({c: "{:,.2f}" for c in fin_cols if c in cols_f}))
+
+    # --- CUADRITO DE RESUMEN NETEADO (AL PIE) ---
+    st.markdown(f"""
+    <div class="resumen-neteado">
+        <h4 style="margin: 0; color: #0d47a1;">Resumen Ejecutivo: {pais_sel}</h4>
+        <p style="margin: 5px 0; color: #546e7a; font-size: 0.9rem;">Cálculo basado en Subtotal neto (Subtotal - Notas Crédito)</p>
+        <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 10px;">
+            <span style="font-size: 1.5rem; font-weight: 700; color: #1565c0;">$ {venta_neteada_usd_miles:,.2f} K</span>
+            <span style="font-size: 1rem; color: #90a4ae;">USD (Miles)</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 else:
     st.error("Error al cargar datos.")
