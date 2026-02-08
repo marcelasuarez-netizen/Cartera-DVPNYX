@@ -1,12 +1,3 @@
-¡Entendido! He mantenido exactamente toda la estructura, KPIs y filtros que ya teníamos (Venta Bruta, Saldo, Mora, DSO, Subtotal, IVA, Retenciones, Filtros de Año/Mes, etc.), pero ahora los datos están segregados:
-
-Dashboard Principal: Excluye automáticamente a los 6 clientes internos para que las métricas reflejen solo la cartera real externa.
-
-Pestaña Desplegable (Expander): Al final del dashboard, encontrarás una sección llamada "🏢 VER FACTURACIÓN INTERNA (INTERCOMPANY)". Al abrirla, verás el detalle de esos clientes específicos sin que afecten los totales globales.
-
-Aquí tienes el código completo y corregido:
-
-Python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
