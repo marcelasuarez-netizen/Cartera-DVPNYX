@@ -1,6 +1,3 @@
-Entendido, aquí tienes el código completo y listo para copiar. He integrado los ajustes de visibilidad (negrita, tamaño de letra y márgenes) para que los números en las barras de Ventas en USD y Saldo Pendiente se vean perfectamente claros.
-
-Python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
