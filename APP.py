@@ -1,10 +1,3 @@
-Entendido, eliminamos el podio y volvemos a la estructura limpia y funcional que tenías, asegurándonos de que todos los filtros (País, Año, Mes y Cliente) estén presentes y que las gráficas se vean perfectas.
-
-He mantenido la bandera de cada país en el sidebar para conservar la identidad visual, pero sin el componente de ranking.
-
-Aquí tienes el código completo y corregido:
-
-Python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
