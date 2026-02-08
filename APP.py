@@ -42,6 +42,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# LISTA DE EXCLUSIÓN ESTRICTA (INTERCOMPANY)
 CLIENTES_EXCLUIR = [
     "TRADIOH LLC", "N&X TECNOLOGIA Y NEGOCIOS", 
     "NYX DESARROLLADORA DE SOFTWARE Y SOLUCIONES TECNOLOGICAS", 
@@ -98,13 +99,28 @@ if datos_excel:
     st.markdown("---")
 
     df_global = pd.DataFrame(resumen_global)
+    # Conversión a miles para las gráficas de barra
+    df_global['Venta_K'] = df_global['Venta_Total_USD'] / 1000
+    df_global['Saldo_K'] = df_global['Saldo_USD'] / 1000
+
     color_map_paises = {"GUATEMALA": "#4DD0E1", "COLOMBIA": "#1565C0", "MEXICO": "#43A047", "ECUADOR": "#FFB300", "USA": "#5E35B1"}
 
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        st.plotly_chart(px.bar(df_global, x="País", y="Venta_Total_USD", text_auto=',.0f', title="Venta Externa (USD)", color="País", color_discrete_map=color_map_paises), use_container_width=True)
+        # Gráfica 1: Ventas en USD (en miles)
+        fig_venta = px.bar(df_global, x="País", y="Venta_K", text_auto='.1f', 
+                           title="Ventas en USD", color="País", color_discrete_map=color_map_paises)
+        fig_venta.update_traces(textsuffix=' K')
+        fig_venta.update_layout(yaxis_title="Miles de USD")
+        st.plotly_chart(fig_venta, use_container_width=True)
+        
     with col_g2:
-        st.plotly_chart(px.bar(df_global, x="País", y="Saldo_USD", text_auto=',.0f', title="Saldo Pendiente Externo (USD)", color_discrete_sequence=['#e53935']), use_container_width=True)
+        # Gráfica 2: Saldo Pendiente (en miles)
+        fig_saldo = px.bar(df_global, x="País", y="Saldo_K", text_auto='.1f', 
+                           title="Saldo Pendiente Externo (USD)", color_discrete_sequence=['#e53935'])
+        fig_saldo.update_traces(textsuffix=' K')
+        fig_saldo.update_layout(yaxis_title="Miles de USD")
+        st.plotly_chart(fig_saldo, use_container_width=True)
 
     st.markdown("---")
 
@@ -134,7 +150,6 @@ if datos_excel:
     for c in fin_cols:
         if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
 
-    # Filtros
     if col_año:
         df_sel[col_año] = pd.to_numeric(df_sel[col_año], errors='coerce').fillna(0).astype(int)
         años = ["Todos"] + sorted(list(df_sel[df_sel[col_año]>0][col_año].unique()), reverse=True)
@@ -214,7 +229,6 @@ if datos_excel:
                                color='Estado_Final', 
                                color_discrete_map=color_map_estados), use_container_width=True)
     with c2:
-        # Aquí forzamos que el gráfico de barras use el mismo nombre "Anulada"
         df_audit = df_sel['Estado_Final'].apply(lambda x: x if x in ["NC", "Anulada"] else "Vigente").value_counts().reset_index()
         df_audit.columns = ['Tipo', 'Cantidad']
         st.plotly_chart(px.bar(df_audit, x='Cantidad', y='Tipo', orientation='h', 
