@@ -113,7 +113,6 @@ if datos_excel:
     col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado', 'Estado de pago', 'Estatus']), 'Cartera')
     col_ven = next((c for c in df_sel.columns if 'vencimiento' in str(c).lower() or 'Vencimiento' in str(c)), None)
 
-    # Exclusión Intercompany
     df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
     df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
 
@@ -148,13 +147,13 @@ if datos_excel:
     # --- CÁLCULOS GESTIÓN DETALLADA ---
     venta_bruta_total = df_sel[~df_sel['Estado_Final'].isin(["Anulada"])][col_tot].sum()
     valor_nc = df_sel[df_sel['Estado_Final'] == "NC"][col_tot].sum()
-    
-    # AJUSTE PEDIDO: El saldo pendiente es la suma directa de la columna saldo
     saldo_p = df_sel[col_sal].sum()
 
-    # Subtotal e IVA solo de facturas Vigentes (Excluye Anuladas y Notas Crédito)
+    # AJUSTE PEDIDO: El subtotal ahora toma solo la suma de su columna de facturas vigentes
     df_vigentes_solo = df_sel[~df_sel['Estado_Final'].isin(["Anulada", "NC"])]
     subtotal_vigente = df_vigentes_solo[col_sub].sum()
+    
+    # IVA sigue basándose en facturas vigentes
     iva_vigente = df_vigentes_solo[col_iva].sum()
 
     st.header(f"Gestión Detallada (Externos): {pais_sel}")
@@ -181,7 +180,7 @@ if datos_excel:
 
     st.markdown("---")
     
-    # --- GRÁFICAS ---
+    # --- GRÁFICAS Y TABLA MAESTRA ---
     c1, c2 = st.columns(2)
     with c1:
         st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera Externa por Estado ($)", color='Estado_Final', color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "Anulada": "#757575", "NC": "#8e24aa"}).update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
@@ -190,7 +189,6 @@ if datos_excel:
         df_audit.columns = ['Tipo', 'Cantidad']
         st.plotly_chart(px.bar(df_audit, x='Cantidad', y='Tipo', orientation='h', title="Auditoría: Tipo de Documento", color='Tipo', color_discrete_map={"NC": "#8e24aa", "Anulada": "#757575", "Vigente": "#43a047"}).update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=False), use_container_width=True)
 
-    # --- TABLA MAESTRA ---
     st.subheader("Listado Maestro (Externos)")
     col_ser = next((c for c in df_sel.columns if c.upper() in ['SERVICIO', 'SERVICIO ']), 'Servicio')
     cols_f = [col_cli, col_ser, col_sub, col_iva, col_tot, col_sal, 'Estado_Final']
