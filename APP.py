@@ -1,3 +1,8 @@
+Entendido. He aplicado el ajuste en los cálculos de Subtotal e IVA (restringiéndolos solo a facturas vigentes) y he mantenido absolutamente todo lo demás intacto: la exclusión de clientes internos, el formato de texto, los filtros de la barra lateral, las gráficas y el KPI de Notas Crédito en rojo.
+
+Aquí tienes el código completo y definitivo para tu APP.py:
+
+Python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -150,12 +155,16 @@ if datos_excel:
     valor_nc = df_sel[df_sel['Estado_Final'] == "NC"][col_tot].sum()
     saldo_p = df_sel[col_sal].sum()
 
+    # Subtotal e IVA solo de facturas Vigentes (Excluye Anuladas y Notas Crédito)
+    df_vigentes_solo = df_sel[~df_sel['Estado_Final'].isin(["Anulada", "NC"])]
+    subtotal_vigente = df_vigentes_solo[col_sub].sum()
+    iva_vigente = df_vigentes_solo[col_iva].sum()
+
     st.header(f"Gestión Detallada (Externos): {pais_sel}")
     
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
     r1c1.metric("Venta bruta", f"$ {venta_bruta_total:,.2f}")
     
-    # KPI Nota Crédito con un solo símbolo negativo y color rojo
     with r1c2:
         st.markdown(f"""
             <div style="background-color: white; padding: 10px; border-radius: 10px; border: 1px solid #bbdefb; height: 100%;">
@@ -169,8 +178,8 @@ if datos_excel:
     r1c5.metric("Dso (días)", f"{(saldo_p / venta_bruta_total * 360) if venta_bruta_total > 0 else 0:.0f}")
 
     r2c1, r2c2, r2c3 = st.columns(3)
-    r2c1.metric("Subtotal", f"$ {df_sel[col_sub].sum():,.2f}")
-    r2c2.metric("IVA", f"$ {df_sel[col_iva].sum():,.2f}")
+    r2c1.metric("Subtotal", f"$ {subtotal_vigente:,.2f}")
+    r2c2.metric("IVA", f"$ {iva_vigente:,.2f}")
     r2c3.metric("Emitidas", f"{len(df_sel):,d} Und")
 
     st.markdown("---")
