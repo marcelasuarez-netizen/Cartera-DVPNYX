@@ -148,6 +148,8 @@ if datos_excel:
     # --- CÁLCULOS GESTIÓN DETALLADA ---
     venta_bruta_total = df_sel[~df_sel['Estado_Final'].isin(["Anulada"])][col_tot].sum()
     valor_nc = df_sel[df_sel['Estado_Final'] == "NC"][col_tot].sum()
+    
+    # AJUSTE PEDIDO: El saldo pendiente es la suma directa de la columna saldo
     saldo_p = df_sel[col_sal].sum()
 
     # Subtotal e IVA solo de facturas Vigentes (Excluye Anuladas y Notas Crédito)
