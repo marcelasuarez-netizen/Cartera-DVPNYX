@@ -23,7 +23,7 @@ st.markdown("""
     }
     [data-testid="stMetricValue"] { font-size: 1.1rem !important; color: #1565c0; font-weight: 700; }
     
-    /* APLICAR FORMATO SOLO A GESTIÓN DETALLADA */
+    /* Etiquetas: Primera Mayúscula, resto minúscula */
     [data-testid="stMetricLabel"] { 
         font-size: 0.75rem !important; 
         color: #546e7a; 
@@ -154,28 +154,39 @@ if datos_excel:
     
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
 
+    # --- CÁLCULOS ESPECÍFICOS ---
+    venta_bruta_total = df_sel[~df_sel['Estado_Final'].isin(["Anulada"])][col_tot].sum()
+    valor_nc = df_sel[df_sel['Estado_Final'] == "NC"][col_tot].sum()
+    saldo_p = df_sel[col_sal].sum()
+
     # --- KPIs GESTIÓN DETALLADA ---
     st.header(f"Gestión Detallada (Externos): {pais_sel}")
-    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    v_bruta = df_sel[~df_sel['Estado_Final'].isin(["NC", "Anulada"])][col_tot].sum()
-    saldo_p = df_sel[col_sal].sum()
     
-    r1c1.metric("Venta bruta (vig)", f"$ {v_bruta:,.2f}")
-    r1c2.metric("Saldo pendiente", f"$ {saldo_p:,.2f}")
-    r1c3.metric("Monto en mora", f"$ {df_sel[df_sel['Estado_Final']=='🔴 En mora'][col_sal].sum():,.2f}")
-    r1c4.metric("Dso (días)", f"{(saldo_p / v_bruta * 360) if v_bruta > 0 else 0:.0f}")
-    r1c5.metric("Emitidas", f"{len(df_sel):,d} Und")
+    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
+    r1c1.metric("Venta bruta", f"$ {venta_bruta_total:,.2f}")
+    # Nota crédito en rojo y negativo
+    st.markdown(f"""
+        <style>
+        div[data-testid="stMetric"]:nth-child(2) label {{ color: #d32f2f !important; }}
+        </style>
+    """, unsafe_allow_html=True)
+    r1c2.metric("Notas crédito", f"$ -{valor_nc:,.2f}")
+    
+    r1c3.metric("Saldo pendiente", f"$ {saldo_p:,.2f}")
+    r1c4.metric("Monto en mora", f"$ {df_sel[df_sel['Estado_Final']=='🔴 En mora'][col_sal].sum():,.2f}")
+    r1c5.metric("Dso (días)", f"{(saldo_p / venta_bruta_total * 360) if venta_bruta_total > 0 else 0:.0f}")
 
-    r2c1, r2c2 = st.columns(2)
+    r2c1, r2c2, r2c3 = st.columns(3)
     r2c1.metric("Subtotal", f"$ {df_sel[col_sub].sum():,.2f}")
     r2c2.metric("IVA", f"$ {df_sel[col_iva].sum():,.2f}")
+    r2c3.metric("Emitidas", f"{len(df_sel):,d} Und")
 
     st.markdown("---")
     
     # Gráficas
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera Externa por Estado ($)", color='Estado_Final', color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "🟠 Cruce": "#fb8c00", "🟢 Al día": "#43a047", "NC": "#8e24aa", "Anulada": "#757575"}).update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera Externa por Estado ($)", color='Estado_Final', color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "Anulada": "#757575", "NC": "#8e24aa"}).update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
     with c2:
         df_audit = df_sel['Estado_Final'].apply(lambda x: x if x in ["NC", "Anulada"] else "Vigente").value_counts().reset_index()
         df_audit.columns = ['Tipo', 'Cantidad']
