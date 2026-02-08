@@ -77,7 +77,6 @@ if datos_excel:
         c_cli = next((c for c in df_p.columns if c in ['Cliente', 'NOMBRE', 'Nombre Receptor']), 'Cliente')
 
         if c_tot in df_p.columns:
-            # Filtro estricto de exclusión
             df_p['CLI_CLEAN'] = df_p[c_cli].astype(str).str.strip().str.upper()
             df_p_ext = df_p[~df_p['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
             
@@ -103,7 +102,6 @@ if datos_excel:
         df_sel.columns = df_sel.iloc[0]; df_sel = df_sel[1:].reset_index(drop=True)
     df_sel.columns = [str(c).strip() for c in df_sel.columns]
 
-    # Mapeo de columnas
     col_sal = next((c for c in df_sel.columns if c.upper() == 'SALDO'), 'Saldo')
     col_sub = next((c for c in df_sel.columns if c.upper() in ['SUBTOTAL', 'SERVICIOS']), 'Subtotal')
     col_iva = next((c for c in df_sel.columns if c.upper() in ['IVA', 'TOTAL IVA']), 'IVA')
@@ -116,17 +114,14 @@ if datos_excel:
     col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado', 'Estado de pago', 'Estatus']), 'Cartera')
     col_ven = next((c for c in df_sel.columns if 'vencimiento' in str(c).lower() or 'Vencimiento' in str(c)), None)
 
-    # SEGREGACIÓN ESTRICTA: Quitar internos del flujo principal
     df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
     df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
 
-    # Conversión Financiera
     fin_cols = [col_sub, col_iva, col_tot, col_sal] + col_rets
     for c in fin_cols:
         if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
     df_sel['Total_Retenciones'] = df_sel[col_rets].sum(axis=1).abs() if col_rets else 0
 
-    # Filtros
     if col_año in df_sel.columns:
         df_sel[col_año] = pd.to_numeric(df_sel[col_año], errors='coerce').fillna(0).astype(int)
         año_f = st.sidebar.selectbox("📅 Año:", ["Todos"] + sorted(list(df_sel[df_sel[col_año]>0][col_año].unique()), reverse=True))
@@ -138,7 +133,6 @@ if datos_excel:
     cli_f = st.sidebar.selectbox("👤 Cliente:", ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique())))
     if cli_f != "Todos": df_sel = df_sel[df_sel[col_cli] == cli_f]
 
-    # Clasificación
     def cls_fin(row):
         t = str(row.get(col_car, "")).upper()
         if "NC" in t: return "NC"
@@ -149,7 +143,6 @@ if datos_excel:
     
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
 
-    # --- KPIs ---
     st.header(f"Gestión Detallada (Externos): {pais_sel}")
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
     v_bruta = df_sel[~df_sel['Estado_Final'].isin(["NC", "ANULADA"])][col_tot].sum()
@@ -161,15 +154,13 @@ if datos_excel:
     r1c4.metric("DSO (Días)", f"{(saldo_p / v_bruta * 360) if v_bruta > 0 else 0:.0f}")
     r1c5.metric("Emitidas", f"{len(df_sel):,d} Und")
 
-    r2c1, r2c2, r2c3, r2c4 = st.columns(4)
+    r2c1, r2c2, r2c3 = st.columns(3) # Reducido a 3 columnas tras quitar Recaudado Real
     r2c1.metric("Subtotal", f"$ {df_sel[col_sub].sum():,.2f}")
     r2c2.metric("IVA", f"$ {df_sel[col_iva].sum():,.2f}")
     r2c3.metric("Retenciones", f"$ {df_sel['Total_Retenciones'].sum():,.2f}")
-    r2c4.metric("Recaudado Real", f"$ {v_bruta - saldo_p:,.2f}")
 
     st.markdown("---")
     
-    # --- GRÁFICAS ---
     c1, c2 = st.columns(2)
     with c1:
         st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera Externa por Estado ($)", color='Estado_Final', color_discrete_map={"🔵 PAGADA": "#1e88e5", "🔴 EN MORA": "#e53935", "🟠 CRUCE": "#fb8c00", "🟢 AL DÍA": "#43a047", "NC": "#8e24aa", "ANULADA": "#757575"}).update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
@@ -178,7 +169,6 @@ if datos_excel:
         df_audit.columns = ['Tipo', 'Cantidad']
         st.plotly_chart(px.bar(df_audit, x='Cantidad', y='Tipo', orientation='h', title="Auditoría: Tipo de Documento", color='Tipo', color_discrete_map={"NC": "#8e24aa", "ANULADA": "#757575", "VIGENTE": "#43a047"}).update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=False), use_container_width=True)
 
-    # Maestro de Facturación
     st.subheader("Listado Maestro (Externos)")
     cols_f = [col_cli, col_ser, col_sub, col_iva, 'Total_Retenciones', col_tot, col_sal, 'Estado_Final']
     st.dataframe(df_sel[cols_f].sort_values(by=col_sal, ascending=False).style.format({c: "{:,.2f}" for c in fin_cols if c in cols_f}))
