@@ -8,7 +8,7 @@ import io
 # --- 1. CONFIGURACIÓN Y CONEXIÓN ---
 ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN" 
 
-st.set_page_config(page_title="Dashboard Cartera DVP-NYX 360", layout="wide")
+st.set_page_config(page_title="Cartera DVPNYX", layout="wide")
 
 # --- ESTILO CSS ---
 st.markdown("""
@@ -97,7 +97,8 @@ if datos_excel:
             s_usd = pd.to_numeric(df_p_ext[c_sal], errors='coerce').fillna(0).sum() / tasa if c_sal in df_p_ext.columns else 0
             resumen_global.append({"País": p, "Venta_Total_USD": v_usd, "Saldo_USD": s_usd})
 
-    st.title("📊 Control Financiero 360: Cartera Externa")
+    # NUEVO TÍTULO SOLICITADO
+    st.title("📊 Cartera DVPNYX")
     st.markdown("---")
 
     df_global = pd.DataFrame(resumen_global)
@@ -180,7 +181,6 @@ if datos_excel:
     
     r1c0, r1c1, r1c2, r1c3, r1c4 = st.columns(5)
     
-    # Cuadrito resumido solicitado
     with r1c0:
         st.markdown(f"""<div class="metric-neteada">
             <p style="color: #546e7a; font-size: 0.75rem; margin: 0; text-transform: capitalize;">Conversión Dólares</p>
