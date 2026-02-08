@@ -28,8 +28,6 @@ st.markdown("""
         text-transform: capitalize; 
     }
     h1, h2, h3 { color: #0d47a1; text-transform: none; }
-    
-    /* Estilo para el recuadro de Conversión Dólares */
     .metric-neteada {
         background-color: #ffffff;
         padding: 10px 15px;
@@ -44,7 +42,6 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# LISTA DE EXCLUSIÓN ESTRICTA (INTERCOMPANY)
 CLIENTES_EXCLUIR = [
     "TRADIOH LLC", "N&X TECNOLOGIA Y NEGOCIOS", 
     "NYX DESARROLLADORA DE SOFTWARE Y SOLUCIONES TECNOLOGICAS", 
@@ -97,16 +94,15 @@ if datos_excel:
             s_usd = pd.to_numeric(df_p_ext[c_sal], errors='coerce').fillna(0).sum() / tasa if c_sal in df_p_ext.columns else 0
             resumen_global.append({"País": p, "Venta_Total_USD": v_usd, "Saldo_USD": s_usd})
 
-    # NUEVO TÍTULO SOLICITADO
     st.title("📊 Cartera DVPNYX")
     st.markdown("---")
 
     df_global = pd.DataFrame(resumen_global)
-    color_map = {"GUATEMALA": "#4DD0E1", "COLOMBIA": "#1565C0", "MEXICO": "#43A047", "ECUADOR": "#FFB300", "USA": "#5E35B1"}
+    color_map_paises = {"GUATEMALA": "#4DD0E1", "COLOMBIA": "#1565C0", "MEXICO": "#43A047", "ECUADOR": "#FFB300", "USA": "#5E35B1"}
 
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        st.plotly_chart(px.bar(df_global, x="País", y="Venta_Total_USD", text_auto=',.0f', title="Venta Externa (USD)", color="País", color_discrete_map=color_map), use_container_width=True)
+        st.plotly_chart(px.bar(df_global, x="País", y="Venta_Total_USD", text_auto=',.0f', title="Venta Externa (USD)", color="País", color_discrete_map=color_map_paises), use_container_width=True)
     with col_g2:
         st.plotly_chart(px.bar(df_global, x="País", y="Saldo_USD", text_auto=',.0f', title="Saldo Pendiente Externo (USD)", color_discrete_sequence=['#e53935']), use_container_width=True)
 
@@ -128,7 +124,6 @@ if datos_excel:
     col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado', 'Estado de pago', 'Estatus']), 'Cartera')
     col_ven = next((c for c in df_sel.columns if 'vencimiento' in str(c).lower() or 'Vencimiento' in str(c)), None)
     col_mon = next((c for c in df_sel.columns if 'Moneda' in c), None)
-    
     col_año = next((c for c in df_sel.columns if 'AÑO' in c.upper()), None)
     col_mes = next((c for c in df_sel.columns if 'MES' in c.upper()), None)
 
@@ -139,6 +134,7 @@ if datos_excel:
     for c in fin_cols:
         if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
 
+    # Filtros
     if col_año:
         df_sel[col_año] = pd.to_numeric(df_sel[col_año], errors='coerce').fillna(0).astype(int)
         años = ["Todos"] + sorted(list(df_sel[df_sel[col_año]>0][col_año].unique()), reverse=True)
@@ -180,17 +176,15 @@ if datos_excel:
     st.header(f"Gestión Detallada (Externos): {pais_sel}")
     
     r1c0, r1c1, r1c2, r1c3, r1c4 = st.columns(5)
-    
     with r1c0:
         st.markdown(f"""<div class="metric-neteada">
-            <p style="color: #546e7a; font-size: 0.75rem; margin: 0; text-transform: capitalize;">Conversión Dólares</p>
+            <p style="color: #546e7a; font-size: 0.75rem; margin: 0;">Conversión Dólares</p>
             <p style="color: #0d47a1; font-size: 1.1rem; font-weight: 700; margin: 0;">$ {venta_neteada_usd_miles:,.2f} K</p>
         </div>""", unsafe_allow_html=True)
-        
     r1c1.metric("Subtotal", f"$ {subtotal_total:,.2f}")
     with r1c2:
         st.markdown(f"""<div style="background-color: white; padding: 10px; border-radius: 10px; border: 1px solid #bbdefb; height: 100%;">
-            <p style="color: #546e7a; font-size: 0.75rem; margin: 0; text-transform: capitalize;">Notas crédito</p>
+            <p style="color: #546e7a; font-size: 0.75rem; margin: 0;">Notas crédito</p>
             <p style="color: #d32f2f; font-size: 1.1rem; font-weight: 700; margin: 0;">- $ {valor_nc_subtotal:,.2f}</p>
         </div>""", unsafe_allow_html=True)
     r1c3.metric("Saldo pendiente", f"$ {saldo_p:,.2f}")
@@ -203,13 +197,30 @@ if datos_excel:
 
     st.markdown("---")
     
+    # --- GRÁFICAS UNIFICADAS ---
+    color_map_estados = {
+        "🔵 Pagada": "#1e88e5", 
+        "🔴 En mora": "#e53935", 
+        "Anulada": "#757575", 
+        "NC": "#8e24aa",
+        "🟢 Al día": "#43a047",
+        "⚪ Sin fecha": "#cfd8dc"
+    }
+
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera Externa por Estado ($)", color='Estado_Final', color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "Anulada": "#757575", "NC": "#8e24aa"}), use_container_width=True)
+        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, 
+                               title="Cartera por Estado ($)", 
+                               color='Estado_Final', 
+                               color_discrete_map=color_map_estados), use_container_width=True)
     with c2:
+        # Aquí forzamos que el gráfico de barras use el mismo nombre "Anulada"
         df_audit = df_sel['Estado_Final'].apply(lambda x: x if x in ["NC", "Anulada"] else "Vigente").value_counts().reset_index()
         df_audit.columns = ['Tipo', 'Cantidad']
-        st.plotly_chart(px.bar(df_audit, x='Cantidad', y='Tipo', orientation='h', title="Auditoría: Tipo de Documento", color='Tipo', color_discrete_map={"NC": "#8e24aa", "Anulada": "#757575", "Vigente": "#43a047"}), use_container_width=True)
+        st.plotly_chart(px.bar(df_audit, x='Cantidad', y='Tipo', orientation='h', 
+                               title="Auditoría: Tipo de Documento", 
+                               color='Tipo', 
+                               color_discrete_map={**color_map_estados, "Vigente": "#43a047"}), use_container_width=True)
 
     st.subheader("Listado Maestro (Externos)")
     col_ser = next((c for c in df_sel.columns if c.upper() in ['SERVICIO', 'SERVICIO ']), 'Servicio')
