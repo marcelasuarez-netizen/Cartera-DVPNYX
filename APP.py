@@ -63,7 +63,7 @@ if datos_excel:
     TASAS_REF = {"COP": 4000, "MXN": 18.5, "GTQ": 7.8, "USD": 1}
     hoy = datetime.now()
 
-    # --- 3. PROCESAMIENTO GLOBAL USD ---
+    # --- 3. PROCESAMIENTO GLOBAL ---
     resumen_global = []
     for p in hojas_paises:
         df_p = datos_excel[p].copy()
@@ -79,7 +79,6 @@ if datos_excel:
         if c_tot in df_p.columns:
             df_p['CLI_CLEAN'] = df_p[c_cli].astype(str).str.strip().str.upper()
             df_p_ext = df_p[~df_p['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
-            
             tasa = TASAS_REF.get(str(df_p[c_mon].iloc[0]).upper() if c_mon and not df_p.empty else "USD", 1)
             v_usd = pd.to_numeric(df_p_ext[c_tot], errors='coerce').fillna(0).sum() / tasa
             s_usd = pd.to_numeric(df_p_ext[c_sal], errors='coerce').fillna(0).sum() / tasa if c_sal in df_p_ext.columns else 0
@@ -113,7 +112,6 @@ if datos_excel:
     col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado', 'Estado de pago', 'Estatus']), 'Cartera')
     col_ven = next((c for c in df_sel.columns if 'vencimiento' in str(c).lower() or 'Vencimiento' in str(c)), None)
 
-    # Exclusión Intercompany
     df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
     df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
 
@@ -121,7 +119,7 @@ if datos_excel:
     for c in fin_cols:
         if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
 
-    # Filtros Desplegables
+    # Filtros
     if 'Año' in df_sel.columns:
         años = ["Todos"] + sorted(list(df_sel['Año'].dropna().unique()), reverse=True)
         año_f = st.sidebar.selectbox("📅 Año:", años)
@@ -146,17 +144,14 @@ if datos_excel:
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
 
     # --- CÁLCULOS GESTIÓN DETALLADA ---
-    # AJUSTE PEDIDO: Subtotal suma todo (vigentes, NC y anuladas)
     subtotal_total = df_sel[col_sub].sum()
     
-    valor_nc = df_sel[df_sel['Estado_Final'] == "NC"][col_tot].sum()
+    # CORRECCIÓN PARA EVITAR DOBLE SIGNO: Usamos abs() para el valor numérico
+    valor_nc_subtotal = abs(df_sel[df_sel['Estado_Final'] == "NC"][col_sub].sum())
+    
     saldo_p = df_sel[col_sal].sum()
-
-    # IVA solo de facturas Vigentes (Excluye Anuladas y Notas Crédito)
     df_vigentes_solo = df_sel[~df_sel['Estado_Final'].isin(["Anulada", "NC"])]
     iva_vigente = df_vigentes_solo[col_iva].sum()
-    
-    # Venta bruta para cálculo de DSO (referencia)
     venta_ref_dso = df_sel[~df_sel['Estado_Final'].isin(["Anulada"])][col_tot].sum()
 
     st.header(f"Gestión Detallada (Externos): {pais_sel}")
@@ -165,10 +160,11 @@ if datos_excel:
     r1c1.metric("Subtotal", f"$ {subtotal_total:,.2f}")
     
     with r1c2:
+        # Se fuerza el símbolo negativo una sola vez
         st.markdown(f"""
             <div style="background-color: white; padding: 10px; border-radius: 10px; border: 1px solid #bbdefb; height: 100%;">
                 <p style="color: #546e7a; font-size: 0.75rem; margin: 0; text-transform: capitalize;">Notas crédito</p>
-                <p style="color: #d32f2f; font-size: 1.1rem; font-weight: 700; margin: 0;">- $ {valor_nc:,.2f}</p>
+                <p style="color: #d32f2f; font-size: 1.1rem; font-weight: 700; margin: 0;">- $ {valor_nc_subtotal:,.2f}</p>
             </div>
         """, unsafe_allow_html=True)
     
@@ -182,7 +178,7 @@ if datos_excel:
 
     st.markdown("---")
     
-    # --- GRÁFICAS Y TABLA MAESTRA ---
+    # Gráficas y tabla maestra permanecen igual
     c1, c2 = st.columns(2)
     with c1:
         st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera Externa por Estado ($)", color='Estado_Final', color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "Anulada": "#757575", "NC": "#8e24aa"}).update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
