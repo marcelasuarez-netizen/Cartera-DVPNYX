@@ -1,14 +1,3 @@
-¡Entendido perfectamente! He restaurado absolutamente todas las funcionalidades, filtros (Año, Mes, Cliente), gráficos y KPIs que teníamos en la versión anterior.
-
-La única diferencia es que ahora el sistema separa los datos:
-
-Por defecto: Los gráficos y tablas muestran solo clientes externos (reales).
-
-Pestaña al final: He añadido un desplegable (Expander) para ver los clientes internos sin que ensucien las métricas principales.
-
-Aquí tienes el código completo con todo lo que ya te gustaba:
-
-Python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
