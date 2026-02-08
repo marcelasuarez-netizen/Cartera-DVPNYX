@@ -1,8 +1,3 @@
-Entendido. He ajustado el formato del KPI de Notas crédito para que aparezca con un único símbolo de resta (-) antes del valor, asegurando que se mantenga en color rojo y con el formato contable correcto.
-
-Aquí tienes el código completo y corregido para tu archivo APP.py:
-
-Python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
