@@ -1,8 +1,3 @@
-Entendido perfectamente. He revisado el código para asegurar que el Podio Dinámico, las Banderas y los Tres Desplegables (País, Año y Mes) convivan perfectamente en la barra lateral sin que uno borre al otro.
-
-Aquí tienes el código completo y unificado. He organizado el Sidebar para que primero aparezca la identidad del país (Bandera + Nombre), luego el Podio o las Notas de Seguimiento, y finalmente los filtros de tiempo.
-
-Python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
