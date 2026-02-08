@@ -113,6 +113,7 @@ if datos_excel:
     col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado', 'Estado de pago', 'Estatus']), 'Cartera')
     col_ven = next((c for c in df_sel.columns if 'vencimiento' in str(c).lower() or 'Vencimiento' in str(c)), None)
 
+    # Exclusión Intercompany
     df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
     df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
 
@@ -145,21 +146,23 @@ if datos_excel:
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
 
     # --- CÁLCULOS GESTIÓN DETALLADA ---
-    venta_bruta_total = df_sel[~df_sel['Estado_Final'].isin(["Anulada"])][col_tot].sum()
+    # AJUSTE PEDIDO: Subtotal suma todo (vigentes, NC y anuladas)
+    subtotal_total = df_sel[col_sub].sum()
+    
     valor_nc = df_sel[df_sel['Estado_Final'] == "NC"][col_tot].sum()
     saldo_p = df_sel[col_sal].sum()
 
-    # AJUSTE PEDIDO: El subtotal ahora toma solo la suma de su columna de facturas vigentes
+    # IVA solo de facturas Vigentes (Excluye Anuladas y Notas Crédito)
     df_vigentes_solo = df_sel[~df_sel['Estado_Final'].isin(["Anulada", "NC"])]
-    subtotal_vigente = df_vigentes_solo[col_sub].sum()
-    
-    # IVA sigue basándose en facturas vigentes
     iva_vigente = df_vigentes_solo[col_iva].sum()
+    
+    # Venta bruta para cálculo de DSO (referencia)
+    venta_ref_dso = df_sel[~df_sel['Estado_Final'].isin(["Anulada"])][col_tot].sum()
 
     st.header(f"Gestión Detallada (Externos): {pais_sel}")
     
-    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
-    r1c1.metric("Venta bruta", f"$ {venta_bruta_total:,.2f}")
+    r1c1, r1c2, r1c3, r1c4 = st.columns(4)
+    r1c1.metric("Subtotal", f"$ {subtotal_total:,.2f}")
     
     with r1c2:
         st.markdown(f"""
@@ -171,11 +174,10 @@ if datos_excel:
     
     r1c3.metric("Saldo pendiente", f"$ {saldo_p:,.2f}")
     r1c4.metric("Monto en mora", f"$ {df_sel[df_sel['Estado_Final']=='🔴 En mora'][col_sal].sum():,.2f}")
-    r1c5.metric("Dso (días)", f"{(saldo_p / venta_bruta_total * 360) if venta_bruta_total > 0 else 0:.0f}")
 
-    r2c1, r2c2, r2c3 = st.columns(3)
-    r2c1.metric("Subtotal", f"$ {subtotal_vigente:,.2f}")
-    r2c2.metric("IVA", f"$ {iva_vigente:,.2f}")
+    r2c1, r2c2, r2c3, r2c4 = st.columns(4)
+    r2c1.metric("IVA", f"$ {iva_vigente:,.2f}")
+    r2c2.metric("Dso (días)", f"{(saldo_p / venta_ref_dso * 360) if venta_ref_dso > 0 else 0:.0f}")
     r2c3.metric("Emitidas", f"{len(df_sel):,d} Und")
 
     st.markdown("---")
