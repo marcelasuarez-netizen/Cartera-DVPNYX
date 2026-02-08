@@ -105,7 +105,6 @@ if datos_excel:
     col_sal = next((c for c in df_sel.columns if c.upper() == 'SALDO'), 'Saldo')
     col_sub = next((c for c in df_sel.columns if c.upper() in ['SUBTOTAL', 'SERVICIOS']), 'Subtotal')
     col_iva = next((c for c in df_sel.columns if c.upper() in ['IVA', 'TOTAL IVA']), 'IVA')
-    col_rets = [c for c in df_sel.columns if any(x in c.upper() for x in ['RETE', 'RET.'])]
     col_año = next((c for c in df_sel.columns if c.upper() in ['AÑO', 'Año']), 'Año')
     col_mes = next((c for c in df_sel.columns if c.upper() == 'MES'), 'Mes')
     col_cli = next((c for c in df_sel.columns if c in ['Cliente', 'NOMBRE', 'Nombre Receptor']), 'Cliente')
@@ -117,10 +116,9 @@ if datos_excel:
     df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
     df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
 
-    fin_cols = [col_sub, col_iva, col_tot, col_sal] + col_rets
+    fin_cols = [col_sub, col_iva, col_tot, col_sal]
     for c in fin_cols:
         if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
-    df_sel['Total_Retenciones'] = df_sel[col_rets].sum(axis=1).abs() if col_rets else 0
 
     if col_año in df_sel.columns:
         df_sel[col_año] = pd.to_numeric(df_sel[col_año], errors='coerce').fillna(0).astype(int)
@@ -154,10 +152,9 @@ if datos_excel:
     r1c4.metric("DSO (Días)", f"{(saldo_p / v_bruta * 360) if v_bruta > 0 else 0:.0f}")
     r1c5.metric("Emitidas", f"{len(df_sel):,d} Und")
 
-    r2c1, r2c2, r2c3 = st.columns(3) # Reducido a 3 columnas tras quitar Recaudado Real
+    r2c1, r2c2 = st.columns(2)
     r2c1.metric("Subtotal", f"$ {df_sel[col_sub].sum():,.2f}")
     r2c2.metric("IVA", f"$ {df_sel[col_iva].sum():,.2f}")
-    r2c3.metric("Retenciones", f"$ {df_sel['Total_Retenciones'].sum():,.2f}")
 
     st.markdown("---")
     
@@ -170,8 +167,5 @@ if datos_excel:
         st.plotly_chart(px.bar(df_audit, x='Cantidad', y='Tipo', orientation='h', title="Auditoría: Tipo de Documento", color='Tipo', color_discrete_map={"NC": "#8e24aa", "ANULADA": "#757575", "VIGENTE": "#43a047"}).update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=False), use_container_width=True)
 
     st.subheader("Listado Maestro (Externos)")
-    cols_f = [col_cli, col_ser, col_sub, col_iva, 'Total_Retenciones', col_tot, col_sal, 'Estado_Final']
+    cols_f = [col_cli, col_ser, col_sub, col_iva, col_tot, col_sal, 'Estado_Final']
     st.dataframe(df_sel[cols_f].sort_values(by=col_sal, ascending=False).style.format({c: "{:,.2f}" for c in fin_cols if c in cols_f}))
-
-else:
-    st.error("Error al cargar datos.")
