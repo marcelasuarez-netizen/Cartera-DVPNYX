@@ -1,8 +1,3 @@
-Entendido. He aplicado el ajuste en los cálculos de Subtotal e IVA (restringiéndolos solo a facturas vigentes) y he mantenido absolutamente todo lo demás intacto: la exclusión de clientes internos, el formato de texto, los filtros de la barra lateral, las gráficas y el KPI de Notas Crédito en rojo.
-
-Aquí tienes el código completo y definitivo para tu APP.py:
-
-Python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
