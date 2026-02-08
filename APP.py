@@ -28,13 +28,18 @@ st.markdown("""
         text-transform: capitalize; 
     }
     h1, h2, h3 { color: #0d47a1; text-transform: none; }
-    .resumen-neteado {
+    
+    /* Estilo para el recuadro de Conversión Dólares */
+    .metric-neteada {
         background-color: #ffffff;
-        padding: 20px;
+        padding: 10px 15px;
         border-radius: 10px;
-        border-left: 5px solid #0d47a1;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        margin-top: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        border: 1px solid #0d47a1;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -96,23 +101,13 @@ if datos_excel:
     st.markdown("---")
 
     df_global = pd.DataFrame(resumen_global)
-    
-    color_map = {
-        "GUATEMALA": "#4DD0E1",
-        "COLOMBIA": "#1565C0",
-        "MEXICO": "#43A047",
-        "ECUADOR": "#FFB300",
-        "USA": "#5E35B1"
-    }
+    color_map = {"GUATEMALA": "#4DD0E1", "COLOMBIA": "#1565C0", "MEXICO": "#43A047", "ECUADOR": "#FFB300", "USA": "#5E35B1"}
 
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        fig_venta = px.bar(df_global, x="País", y="Venta_Total_USD", text_auto=',.0f', 
-                           title="Venta Externa (USD)", color="País", color_discrete_map=color_map)
-        st.plotly_chart(fig_venta, use_container_width=True)
+        st.plotly_chart(px.bar(df_global, x="País", y="Venta_Total_USD", text_auto=',.0f', title="Venta Externa (USD)", color="País", color_discrete_map=color_map), use_container_width=True)
     with col_g2:
-        st.plotly_chart(px.bar(df_global, x="País", y="Saldo_USD", text_auto=',.0f', 
-                               title="Saldo Pendiente Externo (USD)", color_discrete_sequence=['#e53935']), use_container_width=True)
+        st.plotly_chart(px.bar(df_global, x="País", y="Saldo_USD", text_auto=',.0f', title="Saldo Pendiente Externo (USD)", color_discrete_sequence=['#e53935']), use_container_width=True)
 
     st.markdown("---")
 
@@ -169,17 +164,12 @@ if datos_excel:
     
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
 
-    # --- CÁLCULOS GESTIÓN DETALLADA ---
+    # --- CÁLCULOS ---
     subtotal_total = df_sel[col_sub].sum()
     valor_nc_subtotal = abs(df_sel[df_sel['Estado_Final'] == "NC"][col_sub].sum())
-    
-    # Venta Neteada Subtotal (Local)
     venta_neteada_local = subtotal_total - valor_nc_subtotal
-    
-    # Conversión a USD para el cuadrito final
     tasa_actual = TASAS_REF.get(str(df_sel[col_mon].iloc[0]).upper() if col_mon and not df_sel.empty else "USD", 1)
-    venta_neteada_usd = venta_neteada_local / tasa_actual
-    venta_neteada_usd_miles = venta_neteada_usd / 1000
+    venta_neteada_usd_miles = (venta_neteada_local / tasa_actual) / 1000
 
     saldo_p = df_sel[col_sal].sum()
     df_vigentes_solo = df_sel[~df_sel['Estado_Final'].isin(["Anulada", "NC"])]
@@ -188,7 +178,15 @@ if datos_excel:
 
     st.header(f"Gestión Detallada (Externos): {pais_sel}")
     
-    r1c1, r1c2, r1c3, r1c4 = st.columns(4)
+    r1c0, r1c1, r1c2, r1c3, r1c4 = st.columns(5)
+    
+    # Cuadrito resumido solicitado
+    with r1c0:
+        st.markdown(f"""<div class="metric-neteada">
+            <p style="color: #546e7a; font-size: 0.75rem; margin: 0; text-transform: capitalize;">Conversión Dólares</p>
+            <p style="color: #0d47a1; font-size: 1.1rem; font-weight: 700; margin: 0;">$ {venta_neteada_usd_miles:,.2f} K</p>
+        </div>""", unsafe_allow_html=True)
+        
     r1c1.metric("Subtotal", f"$ {subtotal_total:,.2f}")
     with r1c2:
         st.markdown(f"""<div style="background-color: white; padding: 10px; border-radius: 10px; border: 1px solid #bbdefb; height: 100%;">
@@ -217,18 +215,6 @@ if datos_excel:
     col_ser = next((c for c in df_sel.columns if c.upper() in ['SERVICIO', 'SERVICIO ']), 'Servicio')
     cols_f = [col_cli, col_ser, col_sub, col_iva, col_tot, col_sal, 'Estado_Final']
     st.dataframe(df_sel[cols_f].sort_values(by=col_sal, ascending=False).style.format({c: "{:,.2f}" for c in fin_cols if c in cols_f}))
-
-    # --- CUADRITO DE RESUMEN NETEADO (AL PIE) ---
-    st.markdown(f"""
-    <div class="resumen-neteado">
-        <h4 style="margin: 0; color: #0d47a1;">Resumen Ejecutivo: {pais_sel}</h4>
-        <p style="margin: 5px 0; color: #546e7a; font-size: 0.9rem;">Cálculo basado en Subtotal neto (Subtotal - Notas Crédito)</p>
-        <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 10px;">
-            <span style="font-size: 1.5rem; font-weight: 700; color: #1565c0;">$ {venta_neteada_usd_miles:,.2f} K</span>
-            <span style="font-size: 1rem; color: #90a4ae;">USD (Miles)</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
 
 else:
     st.error("Error al cargar datos.")
