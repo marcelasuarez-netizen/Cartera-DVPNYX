@@ -1,3 +1,6 @@
+Entendido, aquí tienes el código completo y listo para copiar. He integrado los ajustes de visibilidad (negrita, tamaño de letra y márgenes) para que los números en las barras de Ventas en USD y Saldo Pendiente se vean perfectamente claros.
+
+Python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -99,7 +102,6 @@ if datos_excel:
     st.markdown("---")
 
     df_global = pd.DataFrame(resumen_global)
-    # Conversión a miles
     df_global['Venta_K'] = df_global['Venta_Total_USD'] / 1000
     df_global['Saldo_K'] = df_global['Saldo_USD'] / 1000
 
@@ -107,20 +109,29 @@ if datos_excel:
 
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        # Gráfica 1: Ventas en USD (Corregida)
+        # Gráfica 1: Ventas en USD
         fig_venta = px.bar(df_global, x="País", y="Venta_K", 
                            title="Ventas en USD", color="País", color_discrete_map=color_map_paises)
-        # Usamos texttemplate para formatear el número y añadir la K
-        fig_venta.update_traces(texttemplate='%{y:.1f} K', textposition='outside')
-        fig_venta.update_layout(template="plotly_white", yaxis_title="Miles de USD", showlegend=False)
+        fig_venta.update_traces(
+            texttemplate='<b>%{y:.1f} K</b>', 
+            textposition='outside',
+            textfont_size=14
+        )
+        max_v = df_global['Venta_K'].max() * 1.2 if not df_global.empty else 100
+        fig_venta.update_layout(template="plotly_white", yaxis_title="Miles de USD", showlegend=False, yaxis=dict(range=[0, max_v]))
         st.plotly_chart(fig_venta, use_container_width=True)
         
     with col_g2:
-        # Gráfica 2: Saldo Pendiente (Corregida)
+        # Gráfica 2: Saldo Pendiente
         fig_saldo = px.bar(df_global, x="País", y="Saldo_K", 
                            title="Saldo Pendiente Externo (USD)", color_discrete_sequence=['#e53935'])
-        fig_saldo.update_traces(texttemplate='%{y:.1f} K', textposition='outside')
-        fig_saldo.update_layout(template="plotly_white", yaxis_title="Miles de USD")
+        fig_saldo.update_traces(
+            texttemplate='<b>%{y:.1f} K</b>', 
+            textposition='outside',
+            textfont_size=14
+        )
+        max_s = df_global['Saldo_K'].max() * 1.2 if not df_global.empty else 100
+        fig_saldo.update_layout(template="plotly_white", yaxis_title="Miles de USD", yaxis=dict(range=[0, max_s]))
         st.plotly_chart(fig_saldo, use_container_width=True)
 
     st.markdown("---")
@@ -215,12 +226,8 @@ if datos_excel:
     
     # --- GRÁFICAS UNIFICADAS ---
     color_map_estados = {
-        "🔵 Pagada": "#1e88e5", 
-        "🔴 En mora": "#e53935", 
-        "Anulada": "#757575", 
-        "NC": "#8e24aa",
-        "🟢 Al día": "#43a047",
-        "⚪ Sin fecha": "#cfd8dc"
+        "🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "Anulada": "#757575", 
+        "NC": "#8e24aa", "🟢 Al día": "#43a047", "⚪ Sin fecha": "#cfd8dc"
     }
 
     c1, c2 = st.columns(2)
