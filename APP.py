@@ -10,7 +10,6 @@ ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN"
 
 st.set_page_config(page_title="Dashboard Cartera DVP-NYX 360", layout="wide")
 
-# --- ESTILO CSS ---
 st.markdown("""
     <style>
     .stApp { background-color: #e3f2fd; }
@@ -27,7 +26,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Lista de Clientes Intercompany a filtrar
+# LISTA DE EXCLUSIÓN CON LIMPIEZA AUTOMÁTICA
 CLIENTES_INTERNOS = [
     "TRADIOH LLC", 
     "N&X TECNOLOGIA Y NEGOCIOS", 
@@ -36,6 +35,8 @@ CLIENTES_INTERNOS = [
     "DVP SOFTWARE AND CONSULTING SA DE CV", 
     "DOUBLE V PARTNERS ECUADOR DVP"
 ]
+# Normalizamos la lista para la comparación
+INTERNOS_CLEAN = [str(c).strip().upper() for c in CLIENTES_INTERNOS]
 
 @st.cache_data(ttl=300)
 def cargar_datos_completos(id_file):
@@ -62,7 +63,7 @@ if datos_excel:
     TASAS_REF = {"COP": 4000, "MXN": 18.5, "GTQ": 7.8, "USD": 1}
     hoy = datetime.now()
 
-    # --- 3. PROCESAMIENTO GLOBAL USD (Filtrado de Internos) ---
+    # --- 3. PROCESAMIENTO GLOBAL USD (FILTRADO ESTRICTO) ---
     resumen_global = []
     for p in hojas_paises:
         df_p = datos_excel[p].copy()
@@ -76,8 +77,9 @@ if datos_excel:
         c_cli = next((c for c in df_p.columns if c in ['Cliente', 'NOMBRE', 'Nombre Receptor']), 'Cliente')
 
         if c_tot in df_p.columns:
-            # Filtro para el consolidado global (solo externos)
-            df_p_ext = df_p[~df_p[c_cli].astype(str).str.upper().isin([c.upper() for c in CLIENTES_INTERNOS])]
+            # FILTRO CRÍTICO: Limpiamos los nombres del Excel antes de comparar
+            df_p['CLI_CLEAN'] = df_p[c_cli].astype(str).str.strip().str.upper()
+            df_p_ext = df_p[~df_p['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
             
             tasa = TASAS_REF.get(str(df_p[c_mon].iloc[0]).upper() if c_mon and not df_p.empty else "USD", 1)
             v_usd = pd.to_numeric(df_p_ext[c_tot], errors='coerce').fillna(0).sum() / tasa
@@ -94,9 +96,7 @@ if datos_excel:
     st.markdown("---")
 
     # --- 4. DETALLE POR PAÍS ---
-    st.sidebar.header("Menú de Filtros")
     pais_sel = st.sidebar.selectbox("🚩 Seleccionar País:", hojas_paises)
-    
     df_sel_raw = datos_excel[pais_sel].copy()
     if 'Total' not in df_sel_raw.columns and 'TOTAL' not in df_sel_raw.columns:
         df_sel_raw.columns = df_sel_raw.iloc[0]; df_sel_raw = df_sel_raw[1:].reset_index(drop=True)
@@ -115,30 +115,28 @@ if datos_excel:
     col_car = next((c for c in df_sel_raw.columns if c in ['Cartera', 'Estado', 'Estado de pago', 'Estatus']), 'Cartera')
     col_ven = next((c for c in df_sel_raw.columns if 'vencimiento' in str(c).lower() or 'Vencimiento' in str(c)), None)
 
-    # SEGREGACIÓN: Separar Internos de Externos
-    mask_internos = df_sel_raw[col_cli].astype(str).str.upper().isin([c.upper() for c in CLIENTES_INTERNOS])
+    # SEGREGACIÓN ESTRICTA
+    df_sel_raw['CLI_CLEAN'] = df_sel_raw[col_cli].astype(str).str.strip().str.upper()
+    mask_internos = df_sel_raw['CLI_CLEAN'].isin(INTERNOS_CLEAN)
     df_internos_final = df_sel_raw[mask_internos].copy()
     df_sel = df_sel_raw[~mask_internos].copy()
 
-    # Conversión Financiera para df_sel (Externos)
+    # Conversión Financiera
     fin_cols = [col_sub, col_iva, col_tot, col_sal] + col_rets
     for c in fin_cols:
         if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
     df_sel['Total_Retenciones'] = df_sel[col_rets].sum(axis=1).abs() if col_rets else 0
 
-    # Filtros SideBar (Aplicados a Externos)
+    # Filtros SideBar
     if col_año in df_sel.columns:
         df_sel[col_año] = pd.to_numeric(df_sel[col_año], errors='coerce').fillna(0).astype(int)
         año_f = st.sidebar.selectbox("📅 Año:", ["Todos"] + sorted(list(df_sel[df_sel[col_año]>0][col_año].unique()), reverse=True))
         if año_f != "Todos": df_sel = df_sel[df_sel[col_año] == año_f]
-    if col_mes in df_sel.columns:
-        df_sel[col_mes] = pd.to_numeric(df_sel[col_mes], errors='coerce').fillna(0).astype(int)
-        mes_f = st.sidebar.selectbox("📆 Mes:", ["Todos"] + [f"{m} - {MESES_NOMBRES.get(m, 'Mes')}" for m in sorted(list(df_sel[df_sel[col_mes]>0][col_mes].unique()))])
-        if mes_f != "Todos": df_sel = df_sel[df_sel[col_mes] == int(mes_f.split(" - ")[0])]
+    
     cli_f = st.sidebar.selectbox("👤 Cliente:", ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique())))
     if cli_f != "Todos": df_sel = df_sel[df_sel[col_cli] == cli_f]
 
-    # Clasificación de Estados
+    # Clasificación
     def cls_fin(row):
         t = str(row.get(col_car, "")).upper()
         if "NC" in t: return "NC"
@@ -151,35 +149,17 @@ if datos_excel:
 
     # --- KPIs ---
     st.header(f"Gestión Detallada (Externos): {pais_sel}")
-    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
+    r1, r2, r3, r4, r5 = st.columns(5)
     v_bruta = df_sel[~df_sel['Estado_Final'].isin(["NC", "ANULADA"])][col_tot].sum()
     saldo_p = df_sel[col_sal].sum()
-    mora_p = df_sel[df_sel['Estado_Final']=='🔴 EN MORA'][col_sal].sum()
     
-    r1c1.metric("Venta Bruta (Vig)", f"$ {v_bruta:,.2f}")
-    r1c2.metric("SALDO PENDIENTE", f"$ {saldo_p:,.2f}")
-    r1c3.metric("Monto en Mora", f"$ {mora_p:,.2f}")
-    r1c4.metric("DSO (Días)", f"{(saldo_p / v_bruta * 360) if v_bruta > 0 else 0:.0f}")
-    r1c5.metric("Emitidas", f"{len(df_sel):,d} Und")
+    r1.metric("Venta Bruta (Vig)", f"$ {v_bruta:,.2f}")
+    r2.metric("SALDO PENDIENTE", f"$ {saldo_p:,.2f}")
+    r3.metric("Monto en Mora", f"$ {df_sel[df_sel['Estado_Final']=='🔴 EN MORA'][col_sal].sum():,.2f}")
+    r4.metric("DSO (Días)", f"{(saldo_p / v_bruta * 360) if v_bruta > 0 else 0:.0f}")
+    r5.metric("Emitidas", f"{len(df_sel):,d} Und")
 
-    r2c1, r2c2, r2c3, r2c4 = st.columns(4)
-    r2c1.metric("Subtotal", f"$ {df_sel[col_sub].sum():,.2f}")
-    r2c2.metric("IVA", f"$ {df_sel[col_iva].sum():,.2f}")
-    r2c3.metric("Retenciones", f"$ {df_sel['Total_Retenciones'].sum():,.2f}")
-    r2c4.metric("Recaudado Real", f"$ {v_bruta - saldo_p:,.2f}")
-
-    st.markdown("---")
-    
-    # --- GRÁFICAS ---
-    c1, c2 = st.columns(2)
-    with c1:
-        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera Externa por Estado ($)", color='Estado_Final', color_discrete_map={"🔵 PAGADA": "#1e88e5", "🔴 EN MORA": "#e53935", "🟠 CRUCE": "#fb8c00", "🟢 AL DÍA": "#43a047", "NC": "#8e24aa", "ANULADA": "#757575"}).update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
-    with c2:
-        df_audit = df_sel['Estado_Final'].apply(lambda x: x if x in ["NC", "ANULADA"] else "VIGENTE").value_counts().reset_index()
-        df_audit.columns = ['Tipo', 'Cantidad']
-        st.plotly_chart(px.bar(df_audit, x='Cantidad', y='Tipo', orientation='h', title="Auditoría: Tipo de Documento", color='Tipo', color_discrete_map={"NC": "#8e24aa", "ANULADA": "#757575", "VIGENTE": "#43a047"}).update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=False), use_container_width=True)
-
-    # Maestro de Facturación
+    # Tabla Maestra
     st.subheader("Listado Maestro (Externos)")
     cols_f = [col_cli, col_ser, col_sub, col_iva, 'Total_Retenciones', col_tot, col_sal, 'Estado_Final']
     st.dataframe(df_sel[cols_f].sort_values(by=col_sal, ascending=False).style.format({c: "{:,.2f}" for c in fin_cols if c in cols_f}))
@@ -188,10 +168,10 @@ if datos_excel:
     st.markdown("---")
     with st.expander("🏢 VER FACTURACIÓN INTERNA (INTERCOMPANY)"):
         if not df_internos_final.empty:
-            st.info(f"Registros de entidades internas en {pais_sel}")
+            st.info("Estos datos están excluidos de los totales superiores.")
             st.dataframe(df_internos_final[[col_cli, col_ser, col_tot, col_sal]].style.format({col_tot: "{:,.2f}", col_sal: "{:,.2f}"}))
         else:
-            st.write("No se encontraron registros internos en este país.")
+            st.write("No se encontraron registros internos.")
 
 else:
-    st.error("Error al cargar Drive.")
+    st.error("Error al cargar datos.")
