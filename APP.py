@@ -1,3 +1,8 @@
+Entendido. He ajustado el formato del KPI de Notas crédito para que aparezca con un único símbolo de resta (-) antes del valor, asegurando que se mantenga en color rojo y con el formato contable correcto.
+
+Aquí tienes el código completo y corregido para tu archivo APP.py:
+
+Python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -31,6 +36,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# LISTA DE EXCLUSIÓN ESTRICTA (INTERCOMPANY)
 CLIENTES_EXCLUIR = [
     "TRADIOH LLC", "N&X TECNOLOGIA Y NEGOCIOS", 
     "NYX DESARROLLADORA DE SOFTWARE Y SOLUCIONES TECNOLOGICAS", 
@@ -53,6 +59,7 @@ def cargar_datos_completos(id_file):
 MESES_NOMBRES = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 
                  7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
 
+# --- 2. CARGA DE DATOS ---
 datos_excel = cargar_datos_completos(ID_DRIVE)
 
 if datos_excel:
@@ -61,13 +68,14 @@ if datos_excel:
     TASAS_REF = {"COP": 4000, "MXN": 18.5, "GTQ": 7.8, "USD": 1}
     hoy = datetime.now()
 
-    # --- PROCESAMIENTO GLOBAL ---
+    # --- 3. PROCESAMIENTO GLOBAL USD ---
     resumen_global = []
     for p in hojas_paises:
         df_p = datos_excel[p].copy()
         if 'Total' not in df_p.columns and 'TOTAL' not in df_p.columns:
             df_p.columns = df_p.iloc[0]; df_p = df_p[1:].reset_index(drop=True)
         df_p.columns = [str(c).strip() for c in df_p.columns]
+        
         c_tot = next((c for c in df_p.columns if c.upper() == 'TOTAL'), 'Total')
         c_sal = next((c for c in df_p.columns if c.upper() == 'SALDO'), 'Saldo')
         c_mon = next((c for c in df_p.columns if 'Moneda' in c), None)
@@ -76,10 +84,14 @@ if datos_excel:
         if c_tot in df_p.columns:
             df_p['CLI_CLEAN'] = df_p[c_cli].astype(str).str.strip().str.upper()
             df_p_ext = df_p[~df_p['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
+            
             tasa = TASAS_REF.get(str(df_p[c_mon].iloc[0]).upper() if c_mon and not df_p.empty else "USD", 1)
             v_usd = pd.to_numeric(df_p_ext[c_tot], errors='coerce').fillna(0).sum() / tasa
             s_usd = pd.to_numeric(df_p_ext[c_sal], errors='coerce').fillna(0).sum() / tasa if c_sal in df_p_ext.columns else 0
             resumen_global.append({"País": p, "Venta_Total_USD": v_usd, "Saldo_USD": s_usd})
+
+    st.title("📊 Control Financiero 360: Cartera Externa")
+    st.markdown("---")
 
     df_global = pd.DataFrame(resumen_global)
     col_g1, col_g2 = st.columns(2)
@@ -90,7 +102,7 @@ if datos_excel:
 
     st.markdown("---")
 
-    # --- DETALLE POR PAÍS ---
+    # --- 4. DETALLE POR PAÍS ---
     st.sidebar.header("Menú de Filtros")
     pais_sel = st.sidebar.selectbox("🚩 Seleccionar País:", hojas_paises)
     df_sel = datos_excel[pais_sel].copy()
@@ -106,6 +118,7 @@ if datos_excel:
     col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado', 'Estado de pago', 'Estatus']), 'Cartera')
     col_ven = next((c for c in df_sel.columns if 'vencimiento' in str(c).lower() or 'Vencimiento' in str(c)), None)
 
+    # Exclusión Intercompany
     df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
     df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
 
@@ -113,13 +126,19 @@ if datos_excel:
     for c in fin_cols:
         if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
 
-    # Filtros SideBar
+    # Filtros Desplegables
     if 'Año' in df_sel.columns:
-        año_f = st.sidebar.selectbox("📅 Año:", ["Todos"] + sorted(list(df_sel['Año'].unique()), reverse=True))
+        años = ["Todos"] + sorted(list(df_sel['Año'].dropna().unique()), reverse=True)
+        año_f = st.sidebar.selectbox("📅 Año:", años)
         if año_f != "Todos": df_sel = df_sel[df_sel['Año'] == año_f]
+    
     if 'Mes' in df_sel.columns:
-        mes_f = st.sidebar.selectbox("📆 Mes:", ["Todos"] + [f"{m} - {MESES_NOMBRES.get(m, 'Mes')}" for m in sorted(list(df_sel['Mes'].unique()))])
+        meses = ["Todos"] + [f"{m} - {MESES_NOMBRES.get(m, 'Mes')}" for m in sorted(list(df_sel['Mes'].dropna().unique()))]
+        mes_f = st.sidebar.selectbox("📆 Mes:", meses)
         if mes_f != "Todos": df_sel = df_sel[df_sel['Mes'] == int(mes_f.split(" - ")[0])]
+
+    cli_f = st.sidebar.selectbox("👤 Cliente:", ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique())))
+    if cli_f != "Todos": df_sel = df_sel[df_sel[col_cli] == cli_f]
 
     def cls_fin(row):
         t = str(row.get(col_car, "")).upper()
@@ -141,12 +160,12 @@ if datos_excel:
     r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
     r1c1.metric("Venta bruta", f"$ {venta_bruta_total:,.2f}")
     
-    # KPI Nota Crédito con Texto en ROJO forzado
+    # KPI Nota Crédito con un solo símbolo negativo y color rojo
     with r1c2:
         st.markdown(f"""
-            <div style="background-color: white; padding: 10px; border-radius: 10px; border: 1px solid #bbdefb;">
+            <div style="background-color: white; padding: 10px; border-radius: 10px; border: 1px solid #bbdefb; height: 100%;">
                 <p style="color: #546e7a; font-size: 0.75rem; margin: 0; text-transform: capitalize;">Notas crédito</p>
-                <p style="color: #d32f2f; font-size: 1.1rem; font-weight: 700; margin: 0;">$ -{valor_nc:,.2f}</p>
+                <p style="color: #d32f2f; font-size: 1.1rem; font-weight: 700; margin: 0;">- $ {valor_nc:,.2f}</p>
             </div>
         """, unsafe_allow_html=True)
     
@@ -160,4 +179,21 @@ if datos_excel:
     r2c3.metric("Emitidas", f"{len(df_sel):,d} Und")
 
     st.markdown("---")
-    # ... Resto de gráficas y tabla maestra ...
+    
+    # --- GRÁFICAS ---
+    c1, c2 = st.columns(2)
+    with c1:
+        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera Externa por Estado ($)", color='Estado_Final', color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "Anulada": "#757575", "NC": "#8e24aa"}).update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+    with c2:
+        df_audit = df_sel['Estado_Final'].apply(lambda x: x if x in ["NC", "Anulada"] else "Vigente").value_counts().reset_index()
+        df_audit.columns = ['Tipo', 'Cantidad']
+        st.plotly_chart(px.bar(df_audit, x='Cantidad', y='Tipo', orientation='h', title="Auditoría: Tipo de Documento", color='Tipo', color_discrete_map={"NC": "#8e24aa", "Anulada": "#757575", "Vigente": "#43a047"}).update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=False), use_container_width=True)
+
+    # --- TABLA MAESTRA ---
+    st.subheader("Listado Maestro (Externos)")
+    col_ser = next((c for c in df_sel.columns if c.upper() in ['SERVICIO', 'SERVICIO ']), 'Servicio')
+    cols_f = [col_cli, col_ser, col_sub, col_iva, col_tot, col_sal, 'Estado_Final']
+    st.dataframe(df_sel[cols_f].sort_values(by=col_sal, ascending=False).style.format({c: "{:,.2f}" for c in fin_cols if c in cols_f}))
+
+else:
+    st.error("Error al cargar datos.")
