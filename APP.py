@@ -1,10 +1,3 @@
-Entendido. He realizado el cambio solicitado en la gráfica de Venta Externa (USD). He aplicado una paleta de colores personalizada donde puedes definir el color específico para cada país, asegurándome de cambiar el color de Guatemala (que antes podía verse rojo por la escala automática) a un tono Azul/Celeste (#4DD0E1) para que se vea diferente.
-
-También he mantenido todos los cálculos y filtros que ya habíamos configurado.
-
-Aquí tienes el código actualizado para APP.py:
-
-Python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
