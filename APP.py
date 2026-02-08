@@ -1,3 +1,10 @@
+Entendido. He realizado el cambio solicitado en la gráfica de Venta Externa (USD). He aplicado una paleta de colores personalizada donde puedes definir el color específico para cada país, asegurándome de cambiar el color de Guatemala (que antes podía verse rojo por la escala automática) a un tono Azul/Celeste (#4DD0E1) para que se vea diferente.
+
+También he mantenido todos los cálculos y filtros que ya habíamos configurado.
+
+Aquí tienes el código actualizado para APP.py:
+
+Python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -88,11 +95,30 @@ if datos_excel:
     st.markdown("---")
 
     df_global = pd.DataFrame(resumen_global)
+    
+    # --- AJUSTE DE COLOR PARA GUATEMALA ---
+    # Definimos colores fijos para evitar que use rojo en Guatemala
+    color_map = {
+        "GUATEMALA": "#4DD0E1",  # Celeste/Azul suave
+        "COLOMBIA": "#1565C0",   # Azul fuerte
+        "MEXICO": "#43A047",     # Verde
+        "ECUADOR": "#FFB300",    # Amarillo/Naranja
+        "USA": "#5E35B1"         # Morado
+    }
+
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        st.plotly_chart(px.bar(df_global, x="País", y="Venta_Total_USD", text_auto=',.0f', title="Venta Externa (USD)", color="País").update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+        fig_venta = px.bar(df_global, x="País", y="Venta_Total_USD", text_auto=',.0f', 
+                           title="Venta Externa (USD)", color="País",
+                           color_discrete_map=color_map)
+        fig_venta.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_venta, use_container_width=True)
+        
     with col_g2:
-        st.plotly_chart(px.bar(df_global, x="País", y="Saldo_USD", text_auto=',.0f', title="Saldo Pendiente Externo (USD)", color_discrete_sequence=['#e53935']).update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
+        # En la gráfica de saldos mantenemos el rojo porque representa deuda/pendiente
+        st.plotly_chart(px.bar(df_global, x="País", y="Saldo_USD", text_auto=',.0f', 
+                               title="Saldo Pendiente Externo (USD)", 
+                               color_discrete_sequence=['#e53935']).update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
 
     st.markdown("---")
 
@@ -111,6 +137,9 @@ if datos_excel:
     col_tot = next((c for c in df_sel.columns if c.upper() == 'TOTAL'), 'Total')
     col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado', 'Estado de pago', 'Estatus']), 'Cartera')
     col_ven = next((c for c in df_sel.columns if 'vencimiento' in str(c).lower() or 'Vencimiento' in str(c)), None)
+    
+    col_año = next((c for c in df_sel.columns if 'AÑO' in c.upper()), None)
+    col_mes = next((c for c in df_sel.columns if 'MES' in c.upper()), None)
 
     df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
     df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
@@ -119,16 +148,18 @@ if datos_excel:
     for c in fin_cols:
         if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
 
-    # Filtros
-    if 'Año' in df_sel.columns:
-        años = ["Todos"] + sorted(list(df_sel['Año'].dropna().unique()), reverse=True)
+    if col_año:
+        df_sel[col_año] = pd.to_numeric(df_sel[col_año], errors='coerce').fillna(0).astype(int)
+        años = ["Todos"] + sorted(list(df_sel[df_sel[col_año]>0][col_año].unique()), reverse=True)
         año_f = st.sidebar.selectbox("📅 Año:", años)
-        if año_f != "Todos": df_sel = df_sel[df_sel['Año'] == año_f]
+        if año_f != "Todos": df_sel = df_sel[df_sel[col_año] == año_f]
     
-    if 'Mes' in df_sel.columns:
-        meses = ["Todos"] + [f"{m} - {MESES_NOMBRES.get(m, 'Mes')}" for m in sorted(list(df_sel['Mes'].dropna().unique()))]
+    if col_mes:
+        df_sel[col_mes] = pd.to_numeric(df_sel[col_mes], errors='coerce').fillna(0).astype(int)
+        meses_disp = sorted(list(df_sel[df_sel[col_mes]>0][col_mes].unique()))
+        meses = ["Todos"] + [f"{int(m)} - {MESES_NOMBRES.get(int(m), 'Mes')}" for m in meses_disp]
         mes_f = st.sidebar.selectbox("📆 Mes:", meses)
-        if mes_f != "Todos": df_sel = df_sel[df_sel['Mes'] == int(mes_f.split(" - ")[0])]
+        if mes_f != "Todos": df_sel = df_sel[df_sel[col_mes] == int(mes_f.split(" - ")[0])]
 
     cli_f = st.sidebar.selectbox("👤 Cliente:", ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique())))
     if cli_f != "Todos": df_sel = df_sel[df_sel[col_cli] == cli_f]
@@ -143,12 +174,8 @@ if datos_excel:
     
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
 
-    # --- CÁLCULOS GESTIÓN DETALLADA ---
     subtotal_total = df_sel[col_sub].sum()
-    
-    # CORRECCIÓN PARA EVITAR DOBLE SIGNO: Usamos abs() para el valor numérico
     valor_nc_subtotal = abs(df_sel[df_sel['Estado_Final'] == "NC"][col_sub].sum())
-    
     saldo_p = df_sel[col_sal].sum()
     df_vigentes_solo = df_sel[~df_sel['Estado_Final'].isin(["Anulada", "NC"])]
     iva_vigente = df_vigentes_solo[col_iva].sum()
@@ -160,7 +187,6 @@ if datos_excel:
     r1c1.metric("Subtotal", f"$ {subtotal_total:,.2f}")
     
     with r1c2:
-        # Se fuerza el símbolo negativo una sola vez
         st.markdown(f"""
             <div style="background-color: white; padding: 10px; border-radius: 10px; border: 1px solid #bbdefb; height: 100%;">
                 <p style="color: #546e7a; font-size: 0.75rem; margin: 0; text-transform: capitalize;">Notas crédito</p>
@@ -178,7 +204,6 @@ if datos_excel:
 
     st.markdown("---")
     
-    # Gráficas y tabla maestra permanecen igual
     c1, c2 = st.columns(2)
     with c1:
         st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera Externa por Estado ($)", color='Estado_Final', color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "Anulada": "#757575", "NC": "#8e24aa"}).update_layout(paper_bgcolor='rgba(0,0,0,0)'), use_container_width=True)
