@@ -162,39 +162,55 @@ if datos_excel:
 
     st.markdown("---")
 
-    # --- 4. DETALLE POR PAÍS Y SIDEBAR ---
+    # --- 4. DETALLE POR PAÍS CON FILTROS DESPLEGABLES ---
     st.sidebar.header("Menú de Filtros")
+    
+    # 1. Filtro País
     pais_sel = st.sidebar.selectbox("🚩 Seleccionar País:", hojas_paises)
     df_sel = datos_excel[pais_sel].copy()
     if 'Total' not in df_sel.columns:
         df_sel.columns = df_sel.iloc[0]; df_sel = df_sel[1:].reset_index(drop=True)
     df_sel.columns = [str(c).strip() for c in df_sel.columns]
 
+    # Identificar columnas necesarias para filtros
     col_sal = next((c for c in df_sel.columns if c.upper() == 'SALDO'), 'Saldo')
     col_sub = next((c for c in df_sel.columns if c.upper() in ['SUBTOTAL', 'SERVICIOS']), 'Subtotal')
-    col_iva = next((c for c in df_sel.columns if c.upper() in ['IVA', 'TOTAL IVA']), 'IVA')
     col_cli = next((c for c in df_sel.columns if c in ['Cliente', 'NOMBRE']), 'Cliente')
     col_tot = next((c for c in df_sel.columns if c.upper() == 'TOTAL'), 'Total')
     col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado']), 'Cartera')
     col_ven = next((c for c in df_sel.columns if 'vencimiento' in str(c).lower()), None)
     col_mon = next((c for c in df_sel.columns if 'Moneda' in c), None)
+    col_año = next((c for c in df_sel.columns if 'AÑO' in c.upper()), None)
+    col_mes = next((c for c in df_sel.columns if 'MES' in c.upper()), None)
 
+    # Exclusión Clientes Internos
     df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
     df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
 
-    # --- GRÁFICA COMPARATIVA EN SIDEBAR ---
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("📊 Salud del Recaudo")
-    sub_total_raw = pd.to_numeric(df_sel[col_sub], errors='coerce').fillna(0).sum()
-    nc_total_raw = abs(pd.to_numeric(df_sel[df_sel[col_car].astype(str).str.contains('NC', case=False, na=False)][col_sub], errors='coerce').fillna(0).sum())
-    val_neteado = sub_total_raw - nc_total_raw
-    val_pagado = pd.to_numeric(df_sel[col_tot], errors='coerce').fillna(0).sum() - pd.to_numeric(df_sel[col_sal], errors='coerce').fillna(0).sum()
+    # 2. Filtro Año (Si existe en la hoja)
+    if col_año:
+        df_sel[col_año] = pd.to_numeric(df_sel[col_año], errors='coerce').fillna(0).astype(int)
+        años = ["Todos"] + sorted([a for a in df_sel[col_año].unique() if a > 0], reverse=True)
+        año_f = st.sidebar.selectbox("📅 Año:", años)
+        if año_f != "Todos":
+            df_sel = df_sel[df_sel[col_año] == año_f]
     
-    fig_side = px.bar(x=["Neteado", "Pagado"], y=[val_neteado, val_pagado], color=["Neteado", "Pagado"], 
-                      color_discrete_map={"Neteado": "#1565C0", "Pagado": "#43A047"})
-    fig_side.update_layout(showlegend=False, height=250, margin=dict(l=10, r=10, t=10, b=10))
-    st.sidebar.plotly_chart(fig_side, use_container_width=True)
+    # 3. Filtro Mes (Si existe en la hoja)
+    if col_mes:
+        df_sel[col_mes] = pd.to_numeric(df_sel[col_mes], errors='coerce').fillna(0).astype(int)
+        meses_disp = sorted([m for m in df_sel[col_mes].unique() if m > 0])
+        meses_opciones = ["Todos"] + [f"{m} - {MESES_NOMBRES.get(m, 'Mes')}" for m in meses_disp]
+        mes_f = st.sidebar.selectbox("📆 Mes:", meses_opciones)
+        if mes_f != "Todos":
+            df_sel = df_sel[df_sel[col_mes] == int(mes_f.split(" - ")[0])]
 
+    # 4. Filtro Cliente
+    clientes_lista = ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique()))
+    cli_f = st.sidebar.selectbox("👤 Cliente:", clientes_lista)
+    if cli_f != "Todos":
+        df_sel = df_sel[df_sel[col_cli] == cli_f]
+
+    # Lógica de Estado
     def cls_fin(row):
         t = str(row.get(col_car, "")).upper()
         if "NC" in t: return "NC"
@@ -205,7 +221,8 @@ if datos_excel:
     
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
 
-    # Métricas
+    # Cálculos
+    sub_total = pd.to_numeric(df_sel[col_sub], errors='coerce').sum()
     val_nc = abs(df_sel[df_sel['Estado_Final'] == "NC"][col_sub].sum())
     tasa_act = TASAS_REF.get(str(df_sel[col_mon].iloc[0]).upper() if col_mon and not df_sel.empty else "USD", 1)
     
@@ -213,13 +230,13 @@ if datos_excel:
     
     r1c0, r1c1, r1c2, r1c3, r1c4 = st.columns(5)
     with r1c0:
-        st.markdown(f"""<div class="metric-custom"><p class="metric-custom-label">Conv. Dólares</p><p class="metric-custom-value">$ {(sub_total_raw-val_nc)/tasa_act/1000:,.2f} K</p></div>""", unsafe_allow_html=True)
-    r1c1.metric("Subtotal", f"$ {sub_total_raw:,.2f}")
+        st.markdown(f"""<div class="metric-custom"><p class="metric-custom-label">Conv. Dólares</p><p class="metric-custom-value">$ {(sub_total-val_nc)/tasa_act/1000:,.2f} K</p></div>""", unsafe_allow_html=True)
+    r1c1.metric("Subtotal", f"$ {sub_total:,.2f}")
     with r1c2:
         st.markdown(f"""<div style="background-color:white; padding:10px; border-radius:10px; border:1px solid #bbdefb; height:100%;"><p style="color:#546e7a; font-size:0.75rem; margin:0;">Notas crédito</p><p style="color:#d32f2f; font-size:1.1rem; font-weight:700; margin:0;">- $ {val_nc:,.2f}</p></div>""", unsafe_allow_html=True)
-    r1c3.metric("Saldo pendiente", f"$ {df_sel[col_sal].sum():,.2f}")
+    r1c3.metric("Saldo pendiente", f"$ {pd.to_numeric(df_sel[col_sal], errors='coerce').sum():,.2f}")
     
-    # --- MÉTRICA CON ENUNCIADO ROJO ---
+    # MÉTRICA CON ENUNCIADO ROJO
     with r1c4:
         st.markdown(f"""<div class="metric-custom">
             <p class="metric-custom-label" style="color: #d32f2f; font-weight: bold;">Monto en mora</p>
@@ -229,7 +246,7 @@ if datos_excel:
     st.markdown("---")
     c1, c2 = st.columns(2)
     with c1:
-        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera por Estado"), use_container_width=True)
+        st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera por Estado", color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "🟢 Al día": "#43a047", "Anulada": "#757575", "NC": "#8e24aa"}), use_container_width=True)
     with c2:
         st.subheader("Listado Maestro")
         st.dataframe(df_sel[[col_cli, col_sal, 'Estado_Final']].sort_values(by=col_sal, ascending=False), use_container_width=True)
