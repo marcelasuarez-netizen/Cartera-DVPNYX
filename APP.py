@@ -10,7 +10,7 @@ ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN"
 
 st.set_page_config(page_title="Cartera DVPNYX", layout="wide")
 
-# --- ESTILO CSS (Respetado íntegramente + Estilo Podio) ---
+# --- ESTILO CSS PROFESIONAL ---
 st.markdown("""
     <style>
     .stApp { background-color: #e3f2fd; }
@@ -39,17 +39,10 @@ st.markdown("""
         flex-direction: column;
         justify-content: center;
     }
-    /* Estilo Podio Pequeño */
-    .podio-wrapper { display: flex; justify-content: center; align-items: flex-end; gap: 5px; height: 60px; margin-top: 10px; }
-    .podio-block { border-radius: 4px 4px 0 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.7rem; width: 45px; }
-    .oro { background: linear-gradient(180deg, #FFD700 0%, #B8860B 100%); height: 50px; }
-    .plata { background: linear-gradient(180deg, #C0C0C0 0%, #708090 100%); height: 35px; }
-    .bronce { background: linear-gradient(180deg, #CD7F32 0%, #8B4513 100%); height: 25px; }
-    .podio-label { font-size: 0.6rem; color: #0d47a1; text-align: center; font-weight: bold; width: 45px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     </style>
     """, unsafe_allow_html=True)
 
-# LISTA DE EXCLUSIÓN (LOS 6 CLIENTES)
+# LISTA DE EXCLUSIÓN ESTRICTA (LOS 6 CLIENTES)
 CLIENTES_EXCLUIR = [
     "TRADIOH LLC", "N&X TECNOLOGIA Y NEGOCIOS", 
     "NYX DESARROLLADORA DE SOFTWARE Y SOLUCIONES TECNOLOGICAS", 
@@ -72,6 +65,7 @@ def cargar_datos_completos(id_file):
 MESES_NOMBRES = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 
                  7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
 
+# --- 2. CARGA DE DATOS ---
 datos_excel = cargar_datos_completos(ID_DRIVE)
 
 if datos_excel:
@@ -101,49 +95,30 @@ if datos_excel:
             s_usd = pd.to_numeric(df_p_ext[c_sal], errors='coerce').fillna(0).sum() / tasa if c_sal in df_p_ext.columns else 0
             resumen_global.append({"País": p, "Venta_Total_USD": v_usd, "Saldo_USD": s_usd})
 
-    # --- LÓGICA DEL PODIO (Ranking por Venta) ---
-    df_rank = pd.DataFrame(resumen_global).sort_values(by="Venta_Total_USD", ascending=False).reset_index(drop=True)
-    top1 = df_rank.iloc[0]['País'] if len(df_rank) > 0 else "-"
-    top2 = df_rank.iloc[1]['País'] if len(df_rank) > 1 else "-"
-    top3 = df_rank.iloc[2]['País'] if len(df_rank) > 2 else "-"
-
-    # HEADER CON TÍTULO Y PODIO
-    col_titulo, col_podio = st.columns([3, 1])
-    with col_titulo:
-        st.title("📊 Cartera DVPNYX")
-    with col_podio:
-        podio_html = f"""
-        <div style="display: flex; flex-direction: column; align-items: center;">
-            <div class='podio-wrapper'>
-                <div style="display: flex; flex-direction: column; align-items: center;"><div class="podio-label">{top2}</div><div class='podio-block plata'>2º</div></div>
-                <div style="display: flex; flex-direction: column; align-items: center;"><div class="podio-label">{top1}</div><div class='podio-block oro'>1º</div></div>
-                <div style="display: flex; flex-direction: column; align-items: center;"><div class="podio-label">{top3}</div><div class='podio-block bronce'>3º</div></div>
-            </div>
-            <p style="font-size: 0.6rem; color: #546e7a; margin-top: 5px; font-weight: bold;">TOP VENTAS EXTERNAS</p>
-        </div>
-        """
-        st.markdown(podio_html, unsafe_allow_html=True)
-
+    st.title("📊 Cartera DVPNYX")
     st.markdown("---")
 
     df_global = pd.DataFrame(resumen_global)
     df_global['Venta_K'] = df_global['Venta_Total_USD'] / 1000
     df_global['Saldo_K'] = df_global['Saldo_USD'] / 1000
+
     color_map_paises = {"GUATEMALA": "#4DD0E1", "COLOMBIA": "#1565C0", "MEXICO": "#43A047", "ECUADOR": "#FFB300", "USA": "#5E35B1"}
 
     col_g1, col_g2 = st.columns(2)
     with col_g1:
         fig_venta = px.bar(df_global, x="País", y="Venta_K", title="Ventas en USD", color="País", color_discrete_map=color_map_paises)
-        fig_venta.update_traces(texttemplate='<b>%{y:.1f} K</b>', textposition='outside')
+        fig_venta.update_traces(texttemplate='<b>%{y:.1f} K</b>', textposition='outside', textfont_size=14)
         st.plotly_chart(fig_venta, use_container_width=True)
+        
     with col_g2:
+        # TÍTULO ACTUALIZADO
         fig_saldo = px.bar(df_global, x="País", y="Saldo_K", title="Saldos por cobrar (USD)", color_discrete_sequence=['#e53935'])
-        fig_saldo.update_traces(texttemplate='<b>%{y:.1f} K</b>', textposition='outside')
+        fig_saldo.update_traces(texttemplate='<b>%{y:.1f} K</b>', textposition='outside', textfont_size=14)
         st.plotly_chart(fig_saldo, use_container_width=True)
 
     st.markdown("---")
 
-    # --- 4. DETALLE POR PAÍS ---
+    # --- 4. DETALLE POR PAÍS Y DESPLEGABLES ---
     st.sidebar.header("Menú de Filtros")
     pais_sel = st.sidebar.selectbox("🚩 Seleccionar País:", hojas_paises)
     df_sel = datos_excel[pais_sel].copy()
@@ -151,7 +126,7 @@ if datos_excel:
         df_sel.columns = df_sel.iloc[0]; df_sel = df_sel[1:].reset_index(drop=True)
     df_sel.columns = [str(c).strip() for c in df_sel.columns]
 
-    # Identificación de columnas
+    # Columnas Financieras
     col_sal = next((c for c in df_sel.columns if c.upper() == 'SALDO'), 'Saldo')
     col_sub = next((c for c in df_sel.columns if c.upper() in ['SUBTOTAL', 'SERVICIOS']), 'Subtotal')
     col_iva = next((c for c in df_sel.columns if c.upper() in ['IVA', 'TOTAL IVA']), 'IVA')
@@ -163,24 +138,28 @@ if datos_excel:
     col_año = next((c for c in df_sel.columns if 'AÑO' in c.upper()), None)
     col_mes = next((c for c in df_sel.columns if 'MES' in c.upper()), None)
 
-    # EXCLUSIÓN INTERCOMPANY
+    # EXCLUSIÓN EN DETALLE
     df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
     df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
 
-    fin_cols = [col_sub, col_iva, col_tot, col_sal]
-    for c in fin_cols:
-        if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
-
-    # Filtros Sidebar
+    # FILTROS DESPLEGABLES (RESTAURADOS)
     if col_año:
         df_sel[col_año] = pd.to_numeric(df_sel[col_año], errors='coerce').fillna(0).astype(int)
         años = ["Todos"] + sorted(list(df_sel[df_sel[col_año]>0][col_año].unique()), reverse=True)
-        if st.sidebar.selectbox("📅 Año:", años) != "Todos": df_sel = df_sel[df_sel[col_año] == st.session_state.get('año_f', años[0])] # Simulado para mantener estructura
+        año_f = st.sidebar.selectbox("📅 Año:", años)
+        if año_f != "Todos": df_sel = df_sel[df_sel[col_año] == año_f]
+    
+    if col_mes:
+        df_sel[col_mes] = pd.to_numeric(df_sel[col_mes], errors='coerce').fillna(0).astype(int)
+        meses_disp = sorted(list(df_sel[df_sel[col_mes]>0][col_mes].unique()))
+        meses = ["Todos"] + [f"{int(m)} - {MESES_NOMBRES.get(int(m), 'Mes')}" for m in meses_disp]
+        mes_f = st.sidebar.selectbox("📆 Mes:", meses)
+        if mes_f != "Todos": df_sel = df_sel[df_sel[col_mes] == int(mes_f.split(" - ")[0])]
 
-    # (Lógica simplificada de filtros para no alterar nada más)
     cli_f = st.sidebar.selectbox("👤 Cliente:", ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique())))
     if cli_f != "Todos": df_sel = df_sel[df_sel[col_cli] == cli_f]
 
+    # Lógica de Estado
     def cls_fin(row):
         t = str(row.get(col_car, "")).upper()
         if "NC" in t: return "NC"
@@ -191,33 +170,38 @@ if datos_excel:
     
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
 
-    # CÁLCULOS
+    # Métricas Netas
+    fin_cols = [col_sub, col_iva, col_tot, col_sal]
+    for c in fin_cols:
+        if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
+
     subtotal_total = df_sel[col_sub].sum()
     valor_nc_subtotal = abs(df_sel[df_sel['Estado_Final'] == "NC"][col_sub].sum())
+    venta_neteada_local = subtotal_total - valor_nc_subtotal
     tasa_actual = TASAS_REF.get(str(df_sel[col_mon].iloc[0]).upper() if col_mon and not df_sel.empty else "USD", 1)
-    venta_neteada_usd_miles = ((subtotal_total - valor_nc_subtotal) / tasa_actual) / 1000
+    venta_neteada_usd_miles = (venta_neteada_local / tasa_actual) / 1000
 
-    st.header(f"Gestión Detallada: {pais_sel}")
+    # MÉTRICAS R1 (MOSTRAR VISUALMENTE)
+    st.header(f"Gestión Detallada (Externos): {pais_sel}")
     
     r1c0, r1c1, r1c2, r1c3, r1c4 = st.columns(5)
     with r1c0:
-        st.markdown(f'<div class="metric-neteada"><p style="color:#546e7a; font-size:0.75rem; margin:0;">Conv. Dólares</p><p style="color:#0d47a1; font-size:1.1rem; font-weight:700; margin:0;">$ {venta_neteada_usd_miles:,.2f} K</p></div>', unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-neteada">
+            <p style="color: #546e7a; font-size: 0.75rem; margin: 0;">Venta Neta USD</p>
+            <p style="color: #0d47a1; font-size: 1.1rem; font-weight: 700; margin: 0;">$ {venta_neteada_usd_miles:,.2f} K</p>
+        </div>""", unsafe_allow_html=True)
     r1c1.metric("Subtotal", f"$ {subtotal_total:,.2f}")
+    with r1c2:
+        st.markdown(f"""<div style="background-color: white; padding: 10px; border-radius: 10px; border: 1px solid #bbdefb; height: 100%;">
+            <p style="color: #546e7a; font-size: 0.75rem; margin: 0;">Notas crédito</p>
+            <p style="color: #d32f2f; font-size: 1.1rem; font-weight: 700; margin: 0;">- $ {valor_nc_subtotal:,.2f}</p>
+        </div>""", unsafe_allow_html=True)
     r1c3.metric("Saldo pendiente", f"$ {df_sel[col_sal].sum():,.2f}")
     r1c4.metric("Monto en mora", f"$ {df_sel[df_sel['Estado_Final']=='🔴 En mora'][col_sal].sum():,.2f}")
 
-    # --- NUEVA GRÁFICA DE TIPOS DE ESTADO ---
     st.markdown("---")
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        color_map_estados = {"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "Anulada": "#757575", "NC": "#8e24aa", "🟢 Al día": "#43a047", "⚪ Sin fecha": "#cfd8dc"}
-        fig_pie = px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Composición de Cartera (%)", color='Estado_Final', color_discrete_map=color_map_estados)
-        st.plotly_chart(fig_pie, use_container_width=True)
-    with c2:
-        st.subheader("Listado Maestro (Externos)")
-        col_ser = next((c for c in df_sel.columns if c.upper() in ['SERVICIO', 'SERVICIO ']), 'Servicio')
-        cols_f = [col_cli, col_ser, col_sub, col_iva, col_tot, col_sal, 'Estado_Final']
-        st.dataframe(df_sel[cols_f].sort_values(by=col_sal, ascending=False), use_container_width=True)
+    st.subheader("Listado Maestro (Externos)")
+    st.dataframe(df_sel.sort_values(by=col_sal, ascending=False), use_container_width=True)
 
 else:
     st.error("Error al cargar datos.")
