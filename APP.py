@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -10,7 +11,7 @@ ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN"
 
 st.set_page_config(page_title="Cartera DVPNYX", layout="wide")
 
-# --- ESTILO CSS ---
+# --- ESTILO CSS (INCLUYE PODIO) ---
 st.markdown("""
     <style>
     .stApp { background-color: #e3f2fd; }
@@ -39,6 +40,13 @@ st.markdown("""
         flex-direction: column;
         justify-content: center;
     }
+    /* Estilo Podio Salud */
+    .podio-wrapper { display: flex; justify-content: center; align-items: flex-end; gap: 8px; height: 70px; }
+    .podio-block { border-radius: 4px 4px 0 0; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.8rem; width: 50px; }
+    .oro { background: linear-gradient(180deg, #FFD700 0%, #B8860B 100%); height: 55px; }
+    .plata { background: linear-gradient(180deg, #C0C0C0 0%, #708090 100%); height: 40px; }
+    .bronce { background: linear-gradient(180deg, #CD7F32 0%, #8B4513 100%); height: 30px; }
+    .podio-name { font-size: 0.65rem; color: #0d47a1; font-weight: bold; text-align: center; width: 50px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -76,6 +84,8 @@ if datos_excel:
 
     # --- 3. PROCESAMIENTO GLOBAL ---
     resumen_global = []
+    salud_paises = []
+    
     for p in hojas_paises:
         df_p = datos_excel[p].copy()
         if 'Total' not in df_p.columns and 'TOTAL' not in df_p.columns:
@@ -94,8 +104,33 @@ if datos_excel:
             v_usd = pd.to_numeric(df_p_ext[c_tot], errors='coerce').fillna(0).sum() / tasa
             s_usd = pd.to_numeric(df_p_ext[c_sal], errors='coerce').fillna(0).sum() / tasa if c_sal in df_p_ext.columns else 0
             resumen_global.append({"País": p, "Venta_Total_USD": v_usd, "Saldo_USD": s_usd})
+            
+            # Cálculo de salud (1 - (Saldo/Venta)) -> Cuanto más alto, más cobrado
+            score_salud = (1 - (s_usd / v_usd)) if v_usd > 0 else 0
+            salud_paises.append({"País": p, "Score": score_salud})
 
-    st.title("📊 Cartera DVPNYX")
+    # LÓGICA DEL PODIO (Ranking Salud)
+    df_salud = pd.DataFrame(salud_paises).sort_values(by="Score", ascending=False).reset_index(drop=True)
+    h1 = df_salud.iloc[0]['País'] if len(df_salud)>0 else "-"
+    h2 = df_salud.iloc[1]['País'] if len(df_salud)>1 else "-"
+    h3 = df_salud.iloc[2]['País'] if len(df_salud)>2 else "-"
+
+    # Header con Podio
+    col_t, col_p = st.columns([3, 1])
+    with col_t:
+        st.title("📊 Cartera DVPNYX")
+    with col_p:
+        st.markdown(f"""
+        <div style="text-align:right">
+            <div class='podio-wrapper'>
+                <div style="display:flex; flex-direction:column; align-items:center"><div class="podio-name">{h2}</div><div class='podio-block plata'>2º</div></div>
+                <div style="display:flex; flex-direction:column; align-items:center"><div class="podio-name">{h1}</div><div class='podio-block oro'>1º</div></div>
+                <div style="display:flex; flex-direction:column; align-items:center"><div class="podio-name">{h3}</div><div class='podio-block bronce'>3º</div></div>
+            </div>
+            <p style="font-size:0.55rem; color:#546e7a; margin-top:2px; font-weight:bold; text-align:center">RANKING SALUD CARTERA</p>
+        </div>
+        """, unsafe_allow_html=True)
+
     st.markdown("---")
 
     df_global = pd.DataFrame(resumen_global)
@@ -106,27 +141,15 @@ if datos_excel:
 
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        # Gráfica 1: Ventas en USD
-        fig_venta = px.bar(df_global, x="País", y="Venta_K", 
-                           title="Ventas en USD", color="País", color_discrete_map=color_map_paises)
-        fig_venta.update_traces(
-            texttemplate='<b>%{y:.1f} K</b>', 
-            textposition='outside',
-            textfont_size=14
-        )
+        fig_venta = px.bar(df_global, x="País", y="Venta_K", title="Ventas en USD", color="País", color_discrete_map=color_map_paises)
+        fig_venta.update_traces(texttemplate='<b>%{y:.1f} K</b>', textposition='outside', textfont_size=14)
         max_v = df_global['Venta_K'].max() * 1.2 if not df_global.empty else 100
         fig_venta.update_layout(template="plotly_white", yaxis_title="Miles de USD", showlegend=False, yaxis=dict(range=[0, max_v]))
         st.plotly_chart(fig_venta, use_container_width=True)
         
     with col_g2:
-        # Gráfica 2: Saldo Pendiente
-        fig_saldo = px.bar(df_global, x="País", y="Saldo_K", 
-                           title="Saldo Pendiente Externo (USD)", color_discrete_sequence=['#e53935'])
-        fig_saldo.update_traces(
-            texttemplate='<b>%{y:.1f} K</b>', 
-            textposition='outside',
-            textfont_size=14
-        )
+        fig_saldo = px.bar(df_global, x="País", y="Saldo_K", title="Saldo Pendiente Externo (USD)", color_discrete_sequence=['#e53935'])
+        fig_saldo.update_traces(texttemplate='<b>%{y:.1f} K</b>', textposition='outside', textfont_size=14)
         max_s = df_global['Saldo_K'].max() * 1.2 if not df_global.empty else 100
         fig_saldo.update_layout(template="plotly_white", yaxis_title="Miles de USD", yaxis=dict(range=[0, max_s]))
         st.plotly_chart(fig_saldo, use_container_width=True)
