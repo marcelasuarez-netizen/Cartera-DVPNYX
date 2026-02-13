@@ -1,15 +1,17 @@
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
 import requests
 import io
 
-# --- 1. CONFIGURACIÓN Y CONEXIÓN ---
-ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN" 
-
+# --- 1. CONFIGURACIÓN (DEBE SER LO PRIMERO) ---
 st.set_page_config(page_title="Cartera DVPNYX", layout="wide")
 
-# --- ESTILO CSS (Tu estilo original con ajuste para el Podio) ---
+# ID de tu Google Drive
+ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN" 
+
+# --- ESTILO CSS ---
 st.markdown("""
     <style>
     .stApp { background-color: #e3f2fd; }
@@ -21,11 +23,7 @@ st.markdown("""
         border: 1px solid #bbdefb;
     }
     [data-testid="stMetricValue"] { font-size: 1.1rem !important; color: #1565c0; font-weight: 700; }
-    [data-testid="stMetricLabel"] { 
-        font-size: 0.75rem !important; 
-        color: #546e7a; 
-        text-transform: capitalize; 
-    }
+    [data-testid="stMetricLabel"] { font-size: 0.75rem !important; color: #546e7a; text-transform: capitalize; }
     h1, h2, h3 { color: #0d47a1; text-transform: none; }
     .metric-neteada {
         background-color: #ffffff;
@@ -34,11 +32,8 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         border: 1px solid #0d47a1;
         height: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
+        display: flex; flex-direction: column; justify-content: center;
     }
-    /* Estilo Podio Salud */
     .podio-wrapper { display: flex; justify-content: center; align-items: flex-end; gap: 8px; height: 70px; }
     .podio-block { border-radius: 4px 4px 0 0; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.8rem; width: 50px; }
     .oro { background: linear-gradient(180deg, #FFD700 0%, #B8860B 100%); height: 55px; }
@@ -48,9 +43,14 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# LISTA DE EXCLUSIÓN (LOS 6 CLIENTES)
-CLIENTES_EXCLUIR = ["TRADIOH LLC", "N&X TECNOLOGIA Y NEGOCIOS", "NYX DESARROLLADORA DE SOFTWARE Y SOLUCIONES TECNOLOGICAS", 
-                    "DOUBLE V PARTNERS GUATEMALA SOCIEDAD ANONIMA", "DVP SOFTWARE AND CONSULTING SA DE CV", "DOUBLE V PARTNERS ECUADOR DVP"]
+# CLIENTES EXCLUIDOS (Los 6 Intercompany)
+CLIENTES_EXCLUIR = [
+    "TRADIOH LLC", "N&X TECNOLOGIA Y NEGOCIOS", 
+    "NYX DESARROLLADORA DE SOFTWARE Y SOLUCIONES TECNOLOGICAS", 
+    "DOUBLE V PARTNERS GUATEMALA SOCIEDAD ANONIMA", 
+    "DVP SOFTWARE AND CONSULTING SA DE CV", 
+    "DOUBLE V PARTNERS ECUADOR DVP"
+]
 INTERNOS_CLEAN = [str(c).strip().upper() for c in CLIENTES_EXCLUIR]
 
 @st.cache_data(ttl=300)
@@ -60,11 +60,10 @@ def cargar_datos_completos(id_file):
         response = requests.get(url)
         return pd.read_excel(io.BytesIO(response.content), sheet_name=None, engine='openpyxl')
     except Exception as e:
-        st.error(f"Error de conexión: {e}"); return None
+        st.error(f"Error de conexión: {e}")
+        return None
 
-MESES_NOMBRES = {1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio", 
-                 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"}
-
+# --- PROCESAMIENTO ---
 datos_excel = cargar_datos_completos(ID_DRIVE)
 
 if datos_excel:
@@ -73,7 +72,6 @@ if datos_excel:
     TASAS_REF = {"COP": 4000, "MXN": 18.5, "GTQ": 7.8, "USD": 1}
     hoy = datetime.now()
 
-    # --- 3. PROCESAMIENTO GLOBAL Y ANÁLISIS DE SALUD PARA PODIO ---
     resumen_global = []
     salud_paises = []
     
@@ -85,31 +83,26 @@ if datos_excel:
         
         c_tot = next((c for c in df_p.columns if c.upper() == 'TOTAL'), 'Total')
         c_sal = next((c for c in df_p.columns if c.upper() == 'SALDO'), 'Saldo')
-        c_mon = next((c for c in df_p.columns if 'Moneda' in c), None)
         c_cli = next((c for c in df_p.columns if c in ['Cliente', 'NOMBRE', 'Nombre Receptor']), 'Cliente')
-        c_car = next((c for c in df_p.columns if c in ['Cartera', 'Estado', 'Estado de pago', 'Estatus']), 'Cartera')
 
         if c_tot in df_p.columns:
             df_p['CLI_CLEAN'] = df_p[c_cli].astype(str).str.strip().str.upper()
             df_p_ext = df_p[~df_p['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
             
-            tasa = TASAS_REF.get(str(df_p[c_mon].iloc[0]).upper() if c_mon and not df_p.empty else "USD", 1)
+            tasa = TASAS_REF.get(next((str(df_p[c]).iloc[0].upper() for c in df_p.columns if 'Moneda' in c), "USD"), 1)
             v_usd = pd.to_numeric(df_p_ext[c_tot], errors='coerce').fillna(0).sum() / tasa
-            s_usd = pd.to_numeric(df_p_ext[c_sal], errors='coerce').fillna(0).sum() / tasa if c_sal in df_p_ext.columns else 0
-            resumen_global.append({"País": p, "Venta_Total_USD": v_usd, "Saldo_USD": s_usd})
+            s_usd = pd.to_numeric(df_p_ext[c_sal], errors='coerce').fillna(0).sum() / tasa
             
-            # Cálculo de salud (Porcentaje de Saldo 0 o Al Día)
-            # Para este código, definimos salud como (Venta Total - Saldo Pendiente) / Venta Total
-            porcentaje_sano = ((v_usd - s_usd) / v_usd * 100) if v_usd > 0 else 0
-            salud_paises.append({"País": p, "Salud": porcentaje_sano})
+            resumen_global.append({"País": p, "Venta_Total_USD": v_usd, "Saldo_USD": s_usd})
+            p_sano = ((v_usd - s_usd) / v_usd * 100) if v_usd > 0 else 0
+            salud_paises.append({"País": p, "Salud": p_sano})
 
-    # ORDENAR PODIO POR SALUD
+    # PODIO SUPERIOR
     df_salud = pd.DataFrame(salud_paises).sort_values(by="Salud", ascending=False).reset_index(drop=True)
     h1 = df_salud.iloc[0]['País'] if len(df_salud)>0 else "-"
     h2 = df_salud.iloc[1]['País'] if len(df_salud)>1 else "-"
     h3 = df_salud.iloc[2]['País'] if len(df_salud)>2 else "-"
 
-    # TÍTULO Y PODIO SUPERIOR DERECHO
     head1, head2 = st.columns([3, 1])
     with head1: st.title("📊 Cartera DVPNYX")
     with head2:
@@ -125,75 +118,43 @@ if datos_excel:
         """, unsafe_allow_html=True)
 
     st.markdown("---")
-    df_global = pd.DataFrame(resumen_global)
-    df_global['Venta_K'] = df_global['Venta_Total_USD'] / 1000
-    df_global['Saldo_K'] = df_global['Saldo_USD'] / 1000
-    color_map_paises = {"GUATEMALA": "#4DD0E1", "COLOMBIA": "#1565C0", "MEXICO": "#43A047", "ECUADOR": "#FFB300", "USA": "#5E35B1"}
+    
+    # GRÁFICAS GLOBALES
+    df_global_plot = pd.DataFrame(resumen_global)
+    df_global_plot['Venta_K'] = df_global_plot['Venta_Total_USD'] / 1000
+    df_global_plot['Saldo_K'] = df_global_plot['Saldo_USD'] / 1000
+    
+    c_g1, c_g2 = st.columns(2)
+    with c_g1:
+        st.plotly_chart(px.bar(df_global_plot, x="País", y="Venta_K", title="Ventas en USD"), use_container_width=True)
+    with c_g2:
+        st.plotly_chart(px.bar(df_global_plot, x="País", y="Saldo_K", title="Saldos por cobrar (USD)"), use_container_width=True)
 
-    col_g1, col_g2 = st.columns(2)
-    with col_g1:
-        fig_v = px.bar(df_global, x="País", y="Venta_K", title="Ventas en USD", color="País", color_discrete_map=color_map_paises)
-        fig_v.update_traces(texttemplate='<b>%{y:.1f} K</b>', textfont_size=14, textposition='outside')
-        st.plotly_chart(fig_v, use_container_width=True)
-    with col_g2:
-        fig_s = px.bar(df_global, x="País", y="Saldo_K", title="Saldos por cobrar (USD)", color_discrete_sequence=['#e53935'])
-        fig_s.update_traces(texttemplate='<b>%{y:.1f} K</b>', textfont_size=14, textposition='outside')
-        st.plotly_chart(fig_s, use_container_width=True)
-
-    # --- 4. DETALLE POR PAÍS ---
-    st.sidebar.header("Menú de Filtros")
-    pais_sel = st.sidebar.selectbox("🚩 Seleccionar País:", hojas_paises)
+    # DETALLE POR PAÍS
+    st.sidebar.header("Filtros")
+    pais_sel = st.sidebar.selectbox("🚩 País:", hojas_paises)
     df_sel = datos_excel[pais_sel].copy()
-    if 'Total' not in df_sel.columns and 'TOTAL' not in df_sel.columns:
-        df_sel.columns = df_sel.iloc[0]; df_sel = df_sel[1:].reset_index(drop=True)
-    df_sel.columns = [str(c).strip() for c in df_sel.columns]
-
-    # Columnas
-    col_sal = next((c for c in df_sel.columns if c.upper() == 'SALDO'), 'Saldo')
-    col_sub = next((c for c in df_sel.columns if c.upper() in ['SUBTOTAL', 'SERVICIOS']), 'Subtotal')
-    col_cli = next((c for c in df_sel.columns if c in ['Cliente', 'NOMBRE', 'Nombre Receptor']), 'Cliente')
-    col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado', 'Estado de pago', 'Estatus']), 'Cartera')
-    col_ven = next((c for c in df_sel.columns if 'vencimiento' in str(c).lower() or 'Vencimiento' in str(c)), None)
-    col_mon = next((c for c in df_sel.columns if 'Moneda' in c), None)
-
-    # EXCLUSIÓN INTERCOMPANY
-    df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
+    if 'Total' not in df_sel.columns: df_sel.columns = df_sel.iloc[0]; df_sel = df_sel[1:]
+    
+    # Filtrar Clientes Externos
+    c_cli_sel = next((c for c in df_sel.columns if any(x in str(c) for x in ['Cliente', 'NOMBRE'])), 'Cliente')
+    df_sel['CLI_CLEAN'] = df_sel[c_cli_sel].astype(str).str.strip().str.upper()
     df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
 
-    # Filtros sidebar
-    cli_f = st.sidebar.selectbox("👤 Cliente:", ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique())))
-    if cli_f != "Todos": df_sel = df_sel[df_sel[col_cli] == cli_f]
-
-    # Lógica de Estado
-    def cls_fin(row):
-        t = str(row.get(col_car, "")).upper()
-        if "NC" in t: return "NC"
-        if any(x in t for x in ["ANULADA", "CANCELADO"]): return "Anulada"
-        if pd.to_numeric(row.get(col_sal), errors='coerce') == 0: return "🔵 Pagada"
-        f_v = pd.to_datetime(row.get(col_ven), errors='coerce')
-        return "🔴 En mora" if pd.notnull(f_v) and f_v < hoy else "🟢 Al día"
-
-    df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
-
-    # Métricas
-    val_sal = pd.to_numeric(df_sel[col_sal], errors='coerce').fillna(0).sum()
-    st.header(f"Gestión Detallada (Externos): {pais_sel}")
-    
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Subtotal", f"$ {pd.to_numeric(df_sel[col_sub], errors='coerce').sum():,.2f}")
-    m2.metric("Saldo pendiente", f"$ {val_sal:,.2f}")
-    m3.metric("Monto en mora", f"$ {pd.to_numeric(df_sel[df_sel['Estado_Final']=='🔴 En mora'][col_sal], errors='coerce').sum():,.2f}")
-
-    # --- PUNTO 2: GRÁFICA POR PAÍS DE LA COLUMNA ESTADO ---
-    st.markdown("---")
+    # GRÁFICA DE ESTADO (PEDIDO)
+    st.header(f"Gestión Detallada: {pais_sel}")
     c_pie, c_tab = st.columns([1, 2])
+    
+    # Identificar columna Estado para la gráfica
+    c_est = next((c for c in df_sel.columns if any(x in str(c).upper() for x in ['ESTADO', 'CARTERA', 'ESTATUS'])), None)
+    
     with c_pie:
-        # Gráfica basada estrictamente en la columna de Estado procesada
-        fig_est = px.pie(df_sel, names='Estado_Final', title=f"Análisis de Estado - {pais_sel}", hole=0.4,
-                         color='Estado_Final', color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "🟢 Al día": "#43a047", "NC": "#8e24aa"})
-        st.plotly_chart(fig_est, use_container_width=True)
+        if c_est:
+            fig_est = px.pie(df_sel, names=c_est, title=f"Estado de Cartera - {pais_sel}", hole=0.4)
+            st.plotly_chart(fig_est, use_container_width=True)
     with c_tab:
         st.subheader("Listado Maestro")
-        st.dataframe(df_sel[[col_cli, col_sal, 'Estado_Final']].sort_values(by=col_sal, ascending=False), use_container_width=True)
+        st.dataframe(df_sel, use_container_width=True)
+
 else:
-    st.error("Error al cargar datos.")
+    st.error("No se pudo cargar el archivo.")
