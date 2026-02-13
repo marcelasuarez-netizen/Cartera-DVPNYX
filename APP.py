@@ -1,7 +1,3 @@
-Aquí tienes el código completo. He mantenido exactamente toda tu estructura, estilos y los 6 excluidos, integrando el podio de salud (quien tiene más cartera "Al Día") y la gráfica de estados por país dentro de la sección detallada.
-
-Python
-import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
