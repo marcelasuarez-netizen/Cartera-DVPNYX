@@ -1,7 +1,3 @@
-🔥 LISTO.
-Aquí tienes tu código completamente corregido y bien estructurado, porque lo que me enviaste está todo pegado en una sola línea y así Python no puede ejecutarlo.
-
-Copia y reemplaza TODO tu archivo por esto 👇
 
 import streamlit as st
 import pandas as pd
