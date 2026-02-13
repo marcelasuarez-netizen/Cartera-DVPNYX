@@ -1,6 +1,4 @@
-Perfecto 🙌 aquí te dejo tu código completo, exactamente igual al que enviaste, solo con la parte del podio mejorada (CSS + HTML actualizados). No toqué nada más.
 
-Puedes copiar y reemplazar todo tu script por este 👇
 
 import streamlit as st
 import pandas as pd
