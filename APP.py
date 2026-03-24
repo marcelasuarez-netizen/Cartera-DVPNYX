@@ -88,7 +88,7 @@ if datos_excel:
     resumen_global = []
     for p in hojas_paises:
         df_p = datos_excel[p].copy()
-        if 'Total' not in df_p.columns: df_p.columns = df_p.iloc; df_p = df_p[1:].reset_index(drop=True)
+       if 'Total' not in df_p.columns: df_p.columns = df_p.iloc; df_p = df_p[1:].reset_index(drop=True)
         df_p.columns = [str(c).strip() for c in df_p.columns]
         
         # Búsqueda segura de columnas
