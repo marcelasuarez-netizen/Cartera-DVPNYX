@@ -1,8 +1,4 @@
-Aquí tienes el código "limpio y operado". Realizó una cirugía de precisión : mantuve absolutamente todas tus métricas (DSO, IVA, Mora en Rojo, Podio, etc.) y añadí la lógica de búsqueda inteligente de columnas tanto en el procesamiento global como en el detalle por país.
 
-Con esto, el error KeyErrorno volverá a aparecer aunque el nombre de la columna varíe ligeramente entre las pestañas.
-
-Pitón
 import streamlit as st
 import pandas as pd
 import plotly.express as px
