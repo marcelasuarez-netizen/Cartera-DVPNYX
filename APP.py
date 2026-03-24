@@ -222,3 +222,4 @@ if datos_excel:
     st.dataframe(df_sel[[col_cli, col_sal, 'Estado_Final']].sort_values(by=col_sal, ascending=False), use_container_width=True)
 
 else:
+    st.error("Error al cargar datos.")
