@@ -10,7 +10,7 @@ ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN"
 
 st.set_page_config(page_title="Cartera DVPNYX", layout="wide")
 
-# --- ESTILO CSS COMPLETO (UX/UI PROFESIONAL) ---
+# --- ESTILO CSS COMPLETO ---
 st.markdown("""
     <style>
     .stApp { background-color: #e3f2fd; }
@@ -23,7 +23,6 @@ st.markdown("""
     }
     [data-testid="stMetricValue"] { font-size: 1.1rem !important; color: #1565c0; font-weight: 700; }
     
-    /* Estilo Podio Salud */
     .podio-wrapper { display: flex; justify-content: center; align-items: flex-end; gap: 8px; height: 70px; }
     .podio-block { border-radius: 4px 4px 0 0; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.8rem; width: 50px; }
     .oro { background: linear-gradient(180deg, #FFD700 0%, #B8860B 100%); height: 55px; }
@@ -31,7 +30,6 @@ st.markdown("""
     .bronce { background: linear-gradient(180deg, #CD7F32 0%, #8B4513 100%); height: 30px; }
     .podio-name { font-size: 0.65rem; color: #0d47a1; font-weight: bold; text-align: center; width: 50px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    /* Contenedor para métricas personalizadas */
     .metric-custom {
         background-color: #ffffff;
         padding: 10px 15px;
@@ -88,14 +86,13 @@ if datos_excel:
     for p in hojas_paises:
         df_p = datos_excel[p].copy()
         
-        # CORRECCIÓN DE FILAS Y COLUMNAS (Línea 91 corregida)
+        # LÍNEA 93 CORREGIDA CON
         if 'Total' not in df_p.columns:
             df_p.columns = df_p.iloc
             df_p = df_p[1:].reset_index(drop=True)
             
         df_p.columns = [str(c).strip() for c in df_p.columns]
         
-        # Búsqueda segura de nombres de columnas
         c_tot = next((c for c in df_p.columns if c.upper() == 'TOTAL'), 'Total')
         c_sal = next((c for c in df_p.columns if c.upper() == 'SALDO'), 'Saldo')
         c_mon = next((c for c in df_p.columns if 'Moneda' in c), None)
@@ -104,16 +101,14 @@ if datos_excel:
         if c_cli in df_p.columns and c_tot in df_p.columns:
             df_p['CLI_CLEAN'] = df_p[c_cli].astype(str).str.strip().str.upper()
             df_p_ext = df_p[~df_p['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
-            
             tasa = TASAS_REF.get(str(df_p[c_mon].iloc).upper() if c_mon and not df_p.empty else "USD", 1)
             v_usd = pd.to_numeric(df_p_ext[c_tot], errors='coerce').fillna(0).sum() / tasa
             s_usd = pd.to_numeric(df_p_ext[c_sal], errors='coerce').fillna(0).sum() / tasa
-            
             resumen_global.append({"País": p, "Venta_Total_USD": v_usd, "Saldo_USD": s_usd})
             score = (1 - (s_usd / v_usd)) if v_usd > 0 else 0
             salud_paises.append({"País": p, "Score": score})
 
-    # PODIO (ARRIBA DERECHA)
+    # PODIO
     df_salud = pd.DataFrame(salud_paises).sort_values(by="Score", ascending=False).reset_index(drop=True)
     h1, h2, h3 = (df_salud.iloc['País'] if len(df_salud)>0 else "-", df_salud.iloc['País'] if len(df_salud)>1 else "-", df_salud.iloc['País'] if len(df_salud)>2 else "-")
 
@@ -128,29 +123,18 @@ if datos_excel:
 
     st.markdown("---")
     
-    # GRÁFICAS GLOBALES
-    df_global = pd.DataFrame(resumen_global)
-    df_global['Venta_K'] = df_global['Venta_Total_USD'] / 1000
-    df_global['Saldo_K'] = df_global['Saldo_USD'] / 1000
-    cg1, cg2 = st.columns(2)
-    with cg1: st.plotly_chart(px.bar(df_global, x="País", y="Venta_K", title="Ventas en USD", color="País"), use_container_width=True)
-    with cg2: st.plotly_chart(px.bar(df_global, x="País", y="Saldo_K", title="Saldos por cobrar (USD)", color_discrete_sequence=['#e53935']), use_container_width=True)
-
-    st.markdown("---")
-
-    # --- 4. FILTROS SIDEBAR ---
+    # 4. FILTROS SIDEBAR
     st.sidebar.header("Menú de Filtros")
     pais_sel = st.sidebar.selectbox("🚩 País:", hojas_paises)
     df_sel = datos_excel[pais_sel].copy()
     
-    # CORRECCIÓN TAMBIÉN EN EL SIDEBAR
+    # TAMBIÉN CORREGIMOS EL ILOC AQUÍ PARA EVITAR OTRO ERROR
     if 'Total' not in df_sel.columns:
         df_sel.columns = df_sel.iloc
         df_sel = df_sel[1:].reset_index(drop=True)
         
     df_sel.columns = [str(c).strip() for c in df_sel.columns]
 
-    # Columnas con detección inteligente
     col_sal = next((c for c in df_sel.columns if c.upper() == 'SALDO'), 'Saldo')
     col_sub = next((c for c in df_sel.columns if c.upper() in ['SUBTOTAL', 'SERVICIOS']), 'Subtotal')
     col_iva = next((c for c in df_sel.columns if c.upper() in ['IVA', 'TOTAL IVA']), 'IVA')
@@ -162,12 +146,10 @@ if datos_excel:
     col_año = next((c for c in df_sel.columns if 'AÑO' in c.upper()), None)
     col_mes = next((c for c in df_sel.columns if 'MES' in c.upper()), None)
 
-    # Exclusión Clientes Internos
     if col_cli in df_sel.columns:
         df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
         df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
 
-    # Filtros de tiempo y cliente
     if col_año:
         años = ["Todos"] + sorted(list(df_sel[col_año].dropna().unique()), reverse=True)
         año_f = st.sidebar.selectbox("📅 Año:", años)
@@ -177,12 +159,10 @@ if datos_excel:
         mes_f = st.sidebar.selectbox("📆 Mes:", meses)
         if mes_f != "Todos": df_sel = df_sel[df_sel[col_mes] == int(mes_f.split(" - "))]
     
-    cli_lista = ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique())) if col_cli in df_sel.columns else ["Todos"]
-    cli_f = st.sidebar.selectbox("👤 Cliente:", cli_lista)
-    if cli_f != "Todos" and col_cli in df_sel.columns: 
-        df_sel = df_sel[df_sel[col_cli] == cli_f]
+    cli_f = st.sidebar.selectbox("👤 Cliente:", ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique())))
+    if cli_f != "Todos": df_sel = df_sel[df_sel[col_cli] == cli_f]
 
-    # --- 5. GESTIÓN DETALLADA ---
+    # 5. KPIs Y GESTIÓN
     def cls_fin(row):
         t = str(row.get(col_car, "")).upper()
         if "NC" in t: return "NC"
@@ -191,48 +171,28 @@ if datos_excel:
         return "🔴 En mora" if pd.notnull(f_v) and f_v < hoy else "🟢 Al día"
     
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
-
     for c in [col_sub, col_iva, col_tot, col_sal]:
         if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
 
-    # KPIs Principales
-    sub_total = df_sel[col_sub].sum() if col_sub in df_sel.columns else 0
-    val_nc = abs(df_sel[df_sel['Estado_Final'] == "NC"][col_sub].sum()) if col_sub in df_sel.columns else 0
-    tasa_act = TASAS_REF.get(str(df_sel[col_mon].iloc).upper() if col_mon and not df_sel.empty else "USD", 1)
-    saldo_p = df_sel[col_sal].sum() if col_sal in df_sel.columns else 0
-    venta_ref_dso = df_sel[~df_sel['Estado_Final'].isin(["Anulada"])][col_tot].sum()
-
-    st.header(f"Gestión Detallada (Externos): {pais_sel}")
+    st.header(f"Gestión Detallada: {pais_sel}")
     
-    # FILA 1: Financiera
     r1c0, r1c1, r1c2, r1c3, r1c4 = st.columns(5)
-    with r1c0: st.markdown(f'<div class="metric-custom"><p class="metric-custom-label">Conv. Dólares</p><p class="metric-custom-value">$ {(sub_total-val_nc)/tasa_act/1000:,.2f} K</p></div>', unsafe_allow_html=True)
-    r1c1.metric("Subtotal", f"$ {sub_total:,.2f}")
-    with r1c2: st.markdown(f'<div style="background-color:white; padding:10px; border-radius:10px; border:1px solid #bbdefb; height:100%;"><p style="color:#546e7a; font-size:0.75rem; margin:0;">Notas crédito</p><p style="color:#d32f2f; font-size:1.1rem; font-weight:700; margin:0;">- $ {val_nc:,.2f}</p></div>', unsafe_allow_html=True)
-    r1c3.metric("Saldo pendiente", f"$ {saldo_p:,.2f}")
-    with r1c4: st.markdown(f'<div class="metric-custom"><p class="metric-custom-label" style="color:#d32f2f; font-weight:bold;">Monto en mora</p><p class="metric-custom-value">$ {df_sel[df_sel['Estado_Final']=='🔴 En mora'][col_sal].sum() if col_sal in df_sel.columns else 0:,.2f}</p></div>', unsafe_allow_html=True)
+    r1c1.metric("Subtotal", f"$ {df_sel[col_sub].sum():,.2f}")
+    r1c3.metric("Saldo pendiente", f"$ {df_sel[col_sal].sum():,.2f}")
+    with r1c4:
+        st.markdown(f'<div class="metric-custom"><p class="metric-custom-label" style="color:#d32f2f; font-weight:bold;">Monto en mora</p><p class="metric-custom-value">$ {df_sel[df_sel['Estado_Final']=='🔴 En mora'][col_sal].sum():,.2f}</p></div>', unsafe_allow_html=True)
 
-    # FILA 2: Gestión
     st.write("")
     r2c1, r2c2, r2c3, r2c4 = st.columns(4)
-    r2c1.metric("IVA", f"$ {df_sel[~df_sel['Estado_Final'].isin(['Anulada', 'NC'])][col_iva].sum() if col_iva in df_sel.columns else 0:,.2f}")
-    r2c2.metric("DSO (Días de Recaudo)", f"{(saldo_p / (venta_ref_dso if venta_ref_dso > 0 else 1) * 360):.0f}")
-    r2c3.metric("Documentos Emitidos", f"{len(df_sel):,d}")
-    r2c4.metric("Venta Neta Local", f"$ {sub_total-val_nc:,.2f}")
+    r2c1.metric("IVA", f"$ {df_sel[~df_sel['Estado_Final'].isin(['Anulada', 'NC'])][col_iva].sum():,.2f}")
+    r2c2.metric("DSO (Días)", f"{(df_sel[col_sal].sum() / (df_sel[col_tot].sum() if df_sel[col_tot].sum()>0 else 1) * 360):.0f}")
+    r2c3.metric("Docs Emitidos", f"{len(df_sel):,d}")
+    r2c4.metric("Venta Neta Local", f"$ {df_sel[col_sub].sum() - abs(df_sel[df_sel['Estado_Final']=='NC'][col_sub].sum()):,.2f}")
 
     st.markdown("---")
-    
-    # GRÁFICAS
     c1, c2 = st.columns(2)
-    with c1: st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera por Estado", color='Estado_Final', color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "🟢 Al día": "#43a047"}), use_container_width=True)
-    with c2:
-        df_aud = df_sel['Estado_Final'].apply(lambda x: x if x in ["NC", "Anulada"] else "Vigente").value_counts().reset_index()
-        df_aud.columns = ['Tipo', 'Cantidad']
-        st.plotly_chart(px.bar(df_aud, x='Cantidad', y='Tipo', orientation='h', title="Auditoría de Documentos", color='Tipo', color_discrete_map={"Vigente": "#43a047", "NC": "#8e24aa"}), use_container_width=True)
-
-    st.subheader("Listado Maestro")
-    cols_tab = [c for c in [col_cli, col_sal, 'Estado_Final'] if c in df_sel.columns or c == 'Estado_Final']
-    st.dataframe(df_sel[cols_tab].sort_values(by=col_sal, ascending=False) if col_sal in df_sel.columns else df_sel, use_container_width=True)
+    with c1: st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera por Estado"), use_container_width=True)
+    with c2: st.subheader("Listado Maestro"); st.dataframe(df_sel[[col_cli, col_sal, 'Estado_Final']].sort_values(by=col_sal, ascending=False), use_container_width=True)
 
 else:
-    st.error("Error al cargar datos desde Google Drive.")
+    st.error("Error al cargar datos.")
