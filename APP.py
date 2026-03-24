@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -11,7 +10,7 @@ ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN"
 
 st.set_page_config(page_title="Cartera DVPNYX", layout="wide")
 
-# --- ESTILO CSS COMPLETO ---
+# --- ESTILO CSS COMPLETO (UX/UI PROFESIONAL) ---
 st.markdown("""
     <style>
     .stApp { background-color: #e3f2fd; }
@@ -83,26 +82,33 @@ if datos_excel:
     TASAS_REF = {"COP": 4000, "MXN": 18.5, "GTQ": 7.8, "USD": 1}
     hoy = datetime.now()
 
-    # --- 3. PROCESAMIENTO GLOBAL PARA EL PODIO ---
+    # --- 3. PROCESAMIENTO GLOBAL ---
     salud_paises = []
     resumen_global = []
     for p in hojas_paises:
         df_p = datos_excel[p].copy()
-       if 'Total' not in df_p.columns: df_p.columns = df_p.iloc; df_p = df_p[1:].reset_index(drop=True)
-       df_p.columns = [str(c).strip() for c in df_p.columns]
         
-        # Búsqueda segura de columnas
+        # CORRECCIÓN DE FILAS Y COLUMNAS (Línea 91 corregida)
+        if 'Total' not in df_p.columns:
+            df_p.columns = df_p.iloc
+            df_p = df_p[1:].reset_index(drop=True)
+            
+        df_p.columns = [str(c).strip() for c in df_p.columns]
+        
+        # Búsqueda segura de nombres de columnas
         c_tot = next((c for c in df_p.columns if c.upper() == 'TOTAL'), 'Total')
         c_sal = next((c for c in df_p.columns if c.upper() == 'SALDO'), 'Saldo')
         c_mon = next((c for c in df_p.columns if 'Moneda' in c), None)
-        c_cli = next((c for c in df_p.columns if str(c).strip().upper() in ['CLIENTE', 'NOMBRE', 'NOMBRE RECEPTOR', 'RECEPTOR']), None)
+        c_cli = next((c for c in df_p.columns if str(c).strip().upper() in ['CLIENTE', 'NOMBRE', 'NOMBRE RECEPTOR', 'RECEPTOR']), 'Cliente')
 
-        if c_cli and c_tot in df_p.columns:
+        if c_cli in df_p.columns and c_tot in df_p.columns:
             df_p['CLI_CLEAN'] = df_p[c_cli].astype(str).str.strip().str.upper()
             df_p_ext = df_p[~df_p['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
+            
             tasa = TASAS_REF.get(str(df_p[c_mon].iloc).upper() if c_mon and not df_p.empty else "USD", 1)
             v_usd = pd.to_numeric(df_p_ext[c_tot], errors='coerce').fillna(0).sum() / tasa
             s_usd = pd.to_numeric(df_p_ext[c_sal], errors='coerce').fillna(0).sum() / tasa
+            
             resumen_global.append({"País": p, "Venta_Total_USD": v_usd, "Saldo_USD": s_usd})
             score = (1 - (s_usd / v_usd)) if v_usd > 0 else 0
             salud_paises.append({"País": p, "Score": score})
@@ -132,11 +138,16 @@ if datos_excel:
 
     st.markdown("---")
 
-    # --- 4. FILTROS SIDEBAR (PAÍS, AÑO, MES, CLIENTE) ---
+    # --- 4. FILTROS SIDEBAR ---
     st.sidebar.header("Menú de Filtros")
     pais_sel = st.sidebar.selectbox("🚩 País:", hojas_paises)
     df_sel = datos_excel[pais_sel].copy()
-    if 'Total' not in df_sel.columns: df_sel.columns = df_sel.iloc; df_sel = df_sel[1:].reset_index(drop=True)
+    
+    # CORRECCIÓN TAMBIÉN EN EL SIDEBAR
+    if 'Total' not in df_sel.columns:
+        df_sel.columns = df_sel.iloc
+        df_sel = df_sel[1:].reset_index(drop=True)
+        
     df_sel.columns = [str(c).strip() for c in df_sel.columns]
 
     # Columnas con detección inteligente
@@ -151,12 +162,10 @@ if datos_excel:
     col_año = next((c for c in df_sel.columns if 'AÑO' in c.upper()), None)
     col_mes = next((c for c in df_sel.columns if 'MES' in c.upper()), None)
 
-    # Exclusión 6 Clientes con validación de columna
+    # Exclusión Clientes Internos
     if col_cli in df_sel.columns:
         df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
         df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
-    else:
-        st.error(f"Error: No se encontró la columna de Cliente en {pais_sel}")
 
     # Filtros de tiempo y cliente
     if col_año:
@@ -170,7 +179,8 @@ if datos_excel:
     
     cli_lista = ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique())) if col_cli in df_sel.columns else ["Todos"]
     cli_f = st.sidebar.selectbox("👤 Cliente:", cli_lista)
-    if cli_f != "Todos" and col_cli in df_sel.columns: df_sel = df_sel[df_sel[col_cli] == cli_f]
+    if cli_f != "Todos" and col_cli in df_sel.columns: 
+        df_sel = df_sel[df_sel[col_cli] == cli_f]
 
     # --- 5. GESTIÓN DETALLADA ---
     def cls_fin(row):
@@ -179,21 +189,22 @@ if datos_excel:
         if pd.to_numeric(row.get(col_sal), errors='coerce') == 0: return "🔵 Pagada"
         f_v = pd.to_datetime(row.get(col_ven), errors='coerce')
         return "🔴 En mora" if pd.notnull(f_v) and f_v < hoy else "🟢 Al día"
+    
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
 
     for c in [col_sub, col_iva, col_tot, col_sal]:
         if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
 
-    # KPIs
+    # KPIs Principales
     sub_total = df_sel[col_sub].sum() if col_sub in df_sel.columns else 0
     val_nc = abs(df_sel[df_sel['Estado_Final'] == "NC"][col_sub].sum()) if col_sub in df_sel.columns else 0
     tasa_act = TASAS_REF.get(str(df_sel[col_mon].iloc).upper() if col_mon and not df_sel.empty else "USD", 1)
     saldo_p = df_sel[col_sal].sum() if col_sal in df_sel.columns else 0
-    venta_ref_dso = df_sel[~df_sel['Estado_Final'].isin(["Anulada"])][col_tot].sum() if col_tot in df_sel.columns else 1
+    venta_ref_dso = df_sel[~df_sel['Estado_Final'].isin(["Anulada"])][col_tot].sum()
 
     st.header(f"Gestión Detallada (Externos): {pais_sel}")
     
-    # FILA 1
+    # FILA 1: Financiera
     r1c0, r1c1, r1c2, r1c3, r1c4 = st.columns(5)
     with r1c0: st.markdown(f'<div class="metric-custom"><p class="metric-custom-label">Conv. Dólares</p><p class="metric-custom-value">$ {(sub_total-val_nc)/tasa_act/1000:,.2f} K</p></div>', unsafe_allow_html=True)
     r1c1.metric("Subtotal", f"$ {sub_total:,.2f}")
@@ -201,17 +212,17 @@ if datos_excel:
     r1c3.metric("Saldo pendiente", f"$ {saldo_p:,.2f}")
     with r1c4: st.markdown(f'<div class="metric-custom"><p class="metric-custom-label" style="color:#d32f2f; font-weight:bold;">Monto en mora</p><p class="metric-custom-value">$ {df_sel[df_sel['Estado_Final']=='🔴 En mora'][col_sal].sum() if col_sal in df_sel.columns else 0:,.2f}</p></div>', unsafe_allow_html=True)
 
-    # FILA 2
+    # FILA 2: Gestión
     st.write("")
     r2c1, r2c2, r2c3, r2c4 = st.columns(4)
     r2c1.metric("IVA", f"$ {df_sel[~df_sel['Estado_Final'].isin(['Anulada', 'NC'])][col_iva].sum() if col_iva in df_sel.columns else 0:,.2f}")
-    r2c2.metric("DSO (Días de Recaudo)", f"{(saldo_p / venta_ref_dso * 360) if venta_ref_dso > 0 else 0:.0f}")
+    r2c2.metric("DSO (Días de Recaudo)", f"{(saldo_p / (venta_ref_dso if venta_ref_dso > 0 else 1) * 360):.0f}")
     r2c3.metric("Documentos Emitidos", f"{len(df_sel):,d}")
     r2c4.metric("Venta Neta Local", f"$ {sub_total-val_nc:,.2f}")
 
     st.markdown("---")
     
-    # GRÁFICAS DE AUDITORÍA
+    # GRÁFICAS
     c1, c2 = st.columns(2)
     with c1: st.plotly_chart(px.pie(df_sel, values=col_tot, names='Estado_Final', hole=0.5, title="Cartera por Estado", color='Estado_Final', color_discrete_map={"🔵 Pagada": "#1e88e5", "🔴 En mora": "#e53935", "🟢 Al día": "#43a047"}), use_container_width=True)
     with c2:
@@ -220,8 +231,8 @@ if datos_excel:
         st.plotly_chart(px.bar(df_aud, x='Cantidad', y='Tipo', orientation='h', title="Auditoría de Documentos", color='Tipo', color_discrete_map={"Vigente": "#43a047", "NC": "#8e24aa"}), use_container_width=True)
 
     st.subheader("Listado Maestro")
-    cols_mostrar = [c for c in [col_cli, col_sal, 'Estado_Final'] if c in df_sel.columns or c == 'Estado_Final']
-    st.dataframe(df_sel[cols_mostrar].sort_values(by=col_sal, ascending=False) if col_sal in df_sel.columns else df_sel, use_container_width=True)
+    cols_tab = [c for c in [col_cli, col_sal, 'Estado_Final'] if c in df_sel.columns or c == 'Estado_Final']
+    st.dataframe(df_sel[cols_tab].sort_values(by=col_sal, ascending=False) if col_sal in df_sel.columns else df_sel, use_container_width=True)
 
 else:
-    st.error("Error al cargar datos.")
+    st.error("Error al cargar datos desde Google Drive.")
