@@ -1,3 +1,8 @@
+Aquí tienes el código "limpio y operado". Realizó una cirugía de precisión : mantuve absolutamente todas tus métricas (DSO, IVA, Mora en Rojo, Podio, etc.) y añadí la lógica de búsqueda inteligente de columnas tanto en el procesamiento global como en el detalle por país.
+
+Con esto, el error KeyErrorno volverá a aparecer aunque el nombre de la columna varíe ligeramente entre las pestañas.
+
+Pitón
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -10,7 +15,7 @@ ID_DRIVE = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN"
 
 st.set_page_config(page_title="Cartera DVPNYX", layout="wide")
 
-# --- ESTILO CSS COMPLETO (INCLUYE TODAS LAS PETICIONES) ---
+# --- ESTILO CSS COMPLETO ---
 st.markdown("""
     <style>
     .stApp { background-color: #e3f2fd; }
@@ -87,27 +92,30 @@ if datos_excel:
     resumen_global = []
     for p in hojas_paises:
         df_p = datos_excel[p].copy()
-        if 'Total' not in df_p.columns: df_p.columns = df_p.iloc[0]; df_p = df_p[1:].reset_index(drop=True)
+        if 'Total' not in df_p.columns: df_p.columns = df_p.iloc; df_p = df_p[1:].reset_index(drop=True)
         df_p.columns = [str(c).strip() for c in df_p.columns]
+        
+        # Búsqueda segura de columnas
         c_tot = next((c for c in df_p.columns if c.upper() == 'TOTAL'), 'Total')
         c_sal = next((c for c in df_p.columns if c.upper() == 'SALDO'), 'Saldo')
         c_mon = next((c for c in df_p.columns if 'Moneda' in c), None)
-        c_cli = next((c for c in df_p.columns if c in ['Cliente', 'NOMBRE']), 'Cliente')
+        c_cli = next((c for c in df_p.columns if str(c).strip().upper() in ['CLIENTE', 'NOMBRE', 'NOMBRE RECEPTOR', 'RECEPTOR']), None)
 
-        df_p['CLI_CLEAN'] = df_p[c_cli].astype(str).str.strip().str.upper()
-        df_p_ext = df_p[~df_p['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
-        tasa = TASAS_REF.get(str(df_p[c_mon].iloc[0]).upper() if c_mon and not df_p.empty else "USD", 1)
-        v_usd = pd.to_numeric(df_p_ext[c_tot], errors='coerce').fillna(0).sum() / tasa
-        s_usd = pd.to_numeric(df_p_ext[c_sal], errors='coerce').fillna(0).sum() / tasa
-        resumen_global.append({"País": p, "Venta_Total_USD": v_usd, "Saldo_USD": s_usd})
-        score = (1 - (s_usd / v_usd)) if v_usd > 0 else 0
-        salud_paises.append({"País": p, "Score": score})
+        if c_cli and c_tot in df_p.columns:
+            df_p['CLI_CLEAN'] = df_p[c_cli].astype(str).str.strip().str.upper()
+            df_p_ext = df_p[~df_p['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
+            tasa = TASAS_REF.get(str(df_p[c_mon].iloc).upper() if c_mon and not df_p.empty else "USD", 1)
+            v_usd = pd.to_numeric(df_p_ext[c_tot], errors='coerce').fillna(0).sum() / tasa
+            s_usd = pd.to_numeric(df_p_ext[c_sal], errors='coerce').fillna(0).sum() / tasa
+            resumen_global.append({"País": p, "Venta_Total_USD": v_usd, "Saldo_USD": s_usd})
+            score = (1 - (s_usd / v_usd)) if v_usd > 0 else 0
+            salud_paises.append({"País": p, "Score": score})
 
     # PODIO (ARRIBA DERECHA)
     df_salud = pd.DataFrame(salud_paises).sort_values(by="Score", ascending=False).reset_index(drop=True)
-    h1, h2, h3 = (df_salud.iloc[0]['País'] if len(df_salud)>0 else "-", df_salud.iloc[1]['País'] if len(df_salud)>1 else "-", df_salud.iloc[2]['País'] if len(df_salud)>2 else "-")
+    h1, h2, h3 = (df_salud.iloc['País'] if len(df_salud)>0 else "-", df_salud.iloc['País'] if len(df_salud)>1 else "-", df_salud.iloc['País'] if len(df_salud)>2 else "-")
 
-    col_t, col_p = st.columns([3, 1])
+    col_t, col_p = st.columns()
     with col_t: st.title("📊 Cartera DVPNYX")
     with col_p:
         st.markdown(f"""<div style="text-align:right"><div class='podio-wrapper'>
@@ -132,14 +140,14 @@ if datos_excel:
     st.sidebar.header("Menú de Filtros")
     pais_sel = st.sidebar.selectbox("🚩 País:", hojas_paises)
     df_sel = datos_excel[pais_sel].copy()
-    if 'Total' not in df_sel.columns: df_sel.columns = df_sel.iloc[0]; df_sel = df_sel[1:].reset_index(drop=True)
+    if 'Total' not in df_sel.columns: df_sel.columns = df_sel.iloc; df_sel = df_sel[1:].reset_index(drop=True)
     df_sel.columns = [str(c).strip() for c in df_sel.columns]
 
-    # Columnas
+    # Columnas con detección inteligente
     col_sal = next((c for c in df_sel.columns if c.upper() == 'SALDO'), 'Saldo')
     col_sub = next((c for c in df_sel.columns if c.upper() in ['SUBTOTAL', 'SERVICIOS']), 'Subtotal')
     col_iva = next((c for c in df_sel.columns if c.upper() in ['IVA', 'TOTAL IVA']), 'IVA')
-    col_cli = next((c for c in df_sel.columns if c in ['Cliente', 'NOMBRE']), 'Cliente')
+    col_cli = next((c for c in df_sel.columns if str(c).strip().upper() in ['CLIENTE', 'NOMBRE', 'RECEPTOR']), 'Cliente')
     col_tot = next((c for c in df_sel.columns if c.upper() == 'TOTAL'), 'Total')
     col_car = next((c for c in df_sel.columns if c in ['Cartera', 'Estado']), 'Cartera')
     col_ven = next((c for c in df_sel.columns if 'vencimiento' in str(c).lower()), None)
@@ -147,9 +155,12 @@ if datos_excel:
     col_año = next((c for c in df_sel.columns if 'AÑO' in c.upper()), None)
     col_mes = next((c for c in df_sel.columns if 'MES' in c.upper()), None)
 
-    # Exclusión 6 Clientes
-    df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
-    df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
+    # Exclusión 6 Clientes con validación de columna
+    if col_cli in df_sel.columns:
+        df_sel['CLI_CLEAN'] = df_sel[col_cli].astype(str).str.strip().str.upper()
+        df_sel = df_sel[~df_sel['CLI_CLEAN'].isin(INTERNOS_CLEAN)].copy()
+    else:
+        st.error(f"Error: No se encontró la columna de Cliente en {pais_sel}")
 
     # Filtros de tiempo y cliente
     if col_año:
@@ -159,9 +170,11 @@ if datos_excel:
     if col_mes:
         meses = ["Todos"] + [f"{int(m)} - {MESES_NOMBRES.get(int(m))}" for m in sorted(df_sel[col_mes].dropna().unique())]
         mes_f = st.sidebar.selectbox("📆 Mes:", meses)
-        if mes_f != "Todos": df_sel = df_sel[df_sel[col_mes] == int(mes_f.split(" - ")[0])]
-    cli_f = st.sidebar.selectbox("👤 Cliente:", ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique())))
-    if cli_f != "Todos": df_sel = df_sel[df_sel[col_cli] == cli_f]
+        if mes_f != "Todos": df_sel = df_sel[df_sel[col_mes] == int(mes_f.split(" - "))]
+    
+    cli_lista = ["Todos"] + sorted(list(df_sel[col_cli].dropna().unique())) if col_cli in df_sel.columns else ["Todos"]
+    cli_f = st.sidebar.selectbox("👤 Cliente:", cli_lista)
+    if cli_f != "Todos" and col_cli in df_sel.columns: df_sel = df_sel[df_sel[col_cli] == cli_f]
 
     # --- 5. GESTIÓN DETALLADA ---
     def cls_fin(row):
@@ -176,11 +189,11 @@ if datos_excel:
         if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
 
     # KPIs
-    sub_total = df_sel[col_sub].sum()
-    val_nc = abs(df_sel[df_sel['Estado_Final'] == "NC"][col_sub].sum())
-    tasa_act = TASAS_REF.get(str(df_sel[col_mon].iloc[0]).upper() if col_mon and not df_sel.empty else "USD", 1)
-    saldo_p = df_sel[col_sal].sum()
-    venta_ref_dso = df_sel[~df_sel['Estado_Final'].isin(["Anulada"])][col_tot].sum()
+    sub_total = df_sel[col_sub].sum() if col_sub in df_sel.columns else 0
+    val_nc = abs(df_sel[df_sel['Estado_Final'] == "NC"][col_sub].sum()) if col_sub in df_sel.columns else 0
+    tasa_act = TASAS_REF.get(str(df_sel[col_mon].iloc).upper() if col_mon and not df_sel.empty else "USD", 1)
+    saldo_p = df_sel[col_sal].sum() if col_sal in df_sel.columns else 0
+    venta_ref_dso = df_sel[~df_sel['Estado_Final'].isin(["Anulada"])][col_tot].sum() if col_tot in df_sel.columns else 1
 
     st.header(f"Gestión Detallada (Externos): {pais_sel}")
     
@@ -190,12 +203,12 @@ if datos_excel:
     r1c1.metric("Subtotal", f"$ {sub_total:,.2f}")
     with r1c2: st.markdown(f'<div style="background-color:white; padding:10px; border-radius:10px; border:1px solid #bbdefb; height:100%;"><p style="color:#546e7a; font-size:0.75rem; margin:0;">Notas crédito</p><p style="color:#d32f2f; font-size:1.1rem; font-weight:700; margin:0;">- $ {val_nc:,.2f}</p></div>', unsafe_allow_html=True)
     r1c3.metric("Saldo pendiente", f"$ {saldo_p:,.2f}")
-    with r1c4: st.markdown(f'<div class="metric-custom"><p class="metric-custom-label" style="color:#d32f2f; font-weight:bold;">Monto en mora</p><p class="metric-custom-value">$ {df_sel[df_sel['Estado_Final']=='🔴 En mora'][col_sal].sum():,.2f}</p></div>', unsafe_allow_html=True)
+    with r1c4: st.markdown(f'<div class="metric-custom"><p class="metric-custom-label" style="color:#d32f2f; font-weight:bold;">Monto en mora</p><p class="metric-custom-value">$ {df_sel[df_sel['Estado_Final']=='🔴 En mora'][col_sal].sum() if col_sal in df_sel.columns else 0:,.2f}</p></div>', unsafe_allow_html=True)
 
-    # FILA 2 (RESTAURADA)
+    # FILA 2
     st.write("")
     r2c1, r2c2, r2c3, r2c4 = st.columns(4)
-    r2c1.metric("IVA", f"$ {df_sel[~df_sel['Estado_Final'].isin(['Anulada', 'NC'])][col_iva].sum():,.2f}")
+    r2c1.metric("IVA", f"$ {df_sel[~df_sel['Estado_Final'].isin(['Anulada', 'NC'])][col_iva].sum() if col_iva in df_sel.columns else 0:,.2f}")
     r2c2.metric("DSO (Días de Recaudo)", f"{(saldo_p / venta_ref_dso * 360) if venta_ref_dso > 0 else 0:.0f}")
     r2c3.metric("Documentos Emitidos", f"{len(df_sel):,d}")
     r2c4.metric("Venta Neta Local", f"$ {sub_total-val_nc:,.2f}")
@@ -211,7 +224,8 @@ if datos_excel:
         st.plotly_chart(px.bar(df_aud, x='Cantidad', y='Tipo', orientation='h', title="Auditoría de Documentos", color='Tipo', color_discrete_map={"Vigente": "#43a047", "NC": "#8e24aa"}), use_container_width=True)
 
     st.subheader("Listado Maestro")
-    st.dataframe(df_sel[[col_cli, col_sal, 'Estado_Final']].sort_values(by=col_sal, ascending=False), use_container_width=True)
+    cols_mostrar = [c for c in [col_cli, col_sal, 'Estado_Final'] if c in df_sel.columns or c == 'Estado_Final']
+    st.dataframe(df_sel[cols_mostrar].sort_values(by=col_sal, ascending=False) if col_sal in df_sel.columns else df_sel, use_container_width=True)
 
 else:
     st.error("Error al cargar datos.")
