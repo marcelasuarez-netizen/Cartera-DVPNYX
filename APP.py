@@ -23,6 +23,7 @@ st.markdown("""
     }
     [data-testid="stMetricValue"] { font-size: 1.1rem !important; color: #1565c0; font-weight: 700; }
     
+    /* Estilo Podio Salud */
     .podio-wrapper { display: flex; justify-content: center; align-items: flex-end; gap: 8px; height: 70px; }
     .podio-block { border-radius: 4px 4px 0 0; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.8rem; width: 50px; }
     .oro { background: linear-gradient(180deg, #FFD700 0%, #B8860B 100%); height: 55px; }
@@ -30,6 +31,7 @@ st.markdown("""
     .bronce { background: linear-gradient(180deg, #CD7F32 0%, #8B4513 100%); height: 30px; }
     .podio-name { font-size: 0.65rem; color: #0d47a1; font-weight: bold; text-align: center; width: 50px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+    /* Contenedor para métricas personalizadas */
     .metric-custom {
         background-color: #ffffff;
         padding: 10px 15px;
@@ -86,9 +88,9 @@ if datos_excel:
     for p in hojas_paises:
         df_p = datos_excel[p].copy()
         
-        # CORRECCIÓN DEFINITIVA LÍNEA 91 (iloc)
+        # CORRECCIÓN DEFINITIVA LÍNEA 91
         if 'Total' not in df_p.columns:
-            df_p.columns = df_p.iloc
+            df_p.columns = df_p.iloc # <--- EL ES CLAVE
             df_p = df_p[1:].reset_index(drop=True)
             
         df_p.columns = [str(c).strip() for c in df_p.columns]
@@ -108,7 +110,7 @@ if datos_excel:
             score = (1 - (s_usd / v_usd)) if v_usd > 0 else 0
             salud_paises.append({"País": p, "Score": score})
 
-    # PODIO (ARRIBA DERECHA)
+    # PODIO
     df_salud = pd.DataFrame(salud_paises).sort_values(by="Score", ascending=False).reset_index(drop=True)
     h1, h2, h3 = (df_salud.iloc['País'] if len(df_salud)>0 else "-", df_salud.iloc['País'] if len(df_salud)>1 else "-", df_salud.iloc['País'] if len(df_salud)>2 else "-")
 
@@ -123,16 +125,6 @@ if datos_excel:
 
     st.markdown("---")
     
-    # GRÁFICAS GLOBALES
-    df_global = pd.DataFrame(resumen_global)
-    df_global['Venta_K'] = df_global['Venta_Total_USD'] / 1000
-    df_global['Saldo_K'] = df_global['Saldo_USD'] / 1000
-    cg1, cg2 = st.columns(2)
-    with cg1: st.plotly_chart(px.bar(df_global, x="País", y="Venta_K", title="Ventas en USD", color="País"), use_container_width=True)
-    with cg2: st.plotly_chart(px.bar(df_global, x="País", y="Saldo_K", title="Saldos por cobrar (USD)", color_discrete_sequence=['#e53935']), use_container_width=True)
-
-    st.markdown("---")
-
     # --- 4. FILTROS SIDEBAR (LOS 4 DESPLEGABLES) ---
     st.sidebar.header("Menú de Filtros")
     
@@ -146,7 +138,7 @@ if datos_excel:
         
     df_sel.columns = [str(c).strip() for c in df_sel.columns]
 
-    # Identificación automática de columnas
+    # Identificación de columnas
     col_sal = next((c for c in df_sel.columns if c.upper() == 'SALDO'), 'Saldo')
     col_sub = next((c for c in df_sel.columns if c.upper() in ['SUBTOTAL', 'SERVICIOS']), 'Subtotal')
     col_iva = next((c for c in df_sel.columns if c.upper() in ['IVA', 'TOTAL IVA']), 'IVA')
@@ -190,12 +182,13 @@ if datos_excel:
         return "🔴 En mora" if pd.notnull(f_v) and f_v < hoy else "🟢 Al día"
     
     df_sel['Estado_Final'] = df_sel.apply(cls_fin, axis=1)
+
     for c in [col_sub, col_iva, col_tot, col_sal]:
         if c in df_sel.columns: df_sel[c] = pd.to_numeric(df_sel[c], errors='coerce').fillna(0)
 
     st.header(f"Gestión Detallada: {pais_sel}")
     
-    # FILA 1: KPIs Principales (Mora en Rojo)
+    # Fila 1: KPIs Principales (Mora en Rojo)
     r1c0, r1c1, r1c2, r1c3, r1c4 = st.columns(5)
     sub_total = df_sel[col_sub].sum()
     val_nc = abs(df_sel[df_sel['Estado_Final'] == "NC"][col_sub].sum())
@@ -207,12 +200,12 @@ if datos_excel:
     r1c3.metric("Saldo pendiente", f"$ {df_sel[col_sal].sum():,.2f}")
     with r1c4: st.markdown(f'<div class="metric-custom"><p class="metric-custom-label" style="color:#d32f2f; font-weight:bold;">Monto en mora</p><p class="metric-custom-value">$ {df_sel[df_sel['Estado_Final']=='🔴 En mora'][col_sal].sum():,.2f}</p></div>', unsafe_allow_html=True)
 
-    # FILA 2: Gestión (IVA, DSO, Docs)
+    # Fila 2: Gestión
     st.write("")
     r2c1, r2c2, r2c3, r2c4 = st.columns(4)
     r2c1.metric("IVA", f"$ {df_sel[~df_sel['Estado_Final'].isin(['Anulada', 'NC'])][col_iva].sum():,.2f}")
-    r2c2.metric("DSO (Días de Recaudo)", f"{(df_sel[col_sal].sum() / (df_sel[col_tot].sum() if df_sel[col_tot].sum()>0 else 1) * 360):.0f}")
-    r2c3.metric("Documentos Emitidos", f"{len(df_sel):,d}")
+    r2c2.metric("DSO (Días)", f"{(df_sel[col_sal].sum() / (df_sel[col_tot].sum() if df_sel[col_tot].sum()>0 else 1) * 360):.0f}")
+    r2c3.metric("Docs Emitidos", f"{len(df_sel):,d}")
     r2c4.metric("Venta Neta Local", f"$ {sub_total-val_nc:,.2f}")
 
     st.markdown("---")
@@ -229,4 +222,3 @@ if datos_excel:
     st.dataframe(df_sel[[col_cli, col_sal, 'Estado_Final']].sort_values(by=col_sal, ascending=False), use_container_width=True)
 
 else:
-    st.error("Error al cargar datos desde Google Drive.")
