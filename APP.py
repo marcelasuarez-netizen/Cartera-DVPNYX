@@ -1,63 +1,71 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
-
-# ---------------------------------------------------
-# CONFIGURACIÓN GENERAL
-# ---------------------------------------------------
 
 st.set_page_config(
-    page_title="Cartera DVPNXY",
+    page_title="Cartera DVPNYX",
     layout="wide"
 )
 
-# ---------------------------------------------------
-# ESTILOS (Modo oscuro fintech)
-# ---------------------------------------------------
-
+# -----------------------------
+# ESTILO
+# -----------------------------
 st.markdown("""
 <style>
-
 body {
-background-color:#0D1B2A;
-color:white;
-font-family:'DM Sans', sans-serif;
+    background-color: #0D1B2A;
+    color: white;
 }
-
-h1,h2,h3{
-font-family:'Playfair Display', serif;
+h1 {
+    font-family: 'Playfair Display', serif;
 }
-
-.metric-container{
-background:#1B263B;
-padding:15px;
-border-radius:10px;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
-st.title("💼 Cartera DVPNXY")
+st.title("📊 Cartera DVPNYX")
 
-# ---------------------------------------------------
-# CONEXIÓN GOOGLE SHEETS
-# ---------------------------------------------------
+# -----------------------------
+# CARGA DE DATOS
+# -----------------------------
 
-SHEET_ID = "1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN"
-SHEET_NAME = "Base"
+url = "https://docs.google.com/spreadsheets/d/1IlCy67vBvvcj1LrdCtUTJk9EjZADOOqN/export?format=xlsx"
 
-url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
+@st.cache_data
+def load_data():
 
-df = pd.read_csv(url)
+    sheets = [
+        " Colombia",
+        "Ecuador",
+        " Guatemala",
+        "DVP Mx",
+        "NYX",
+        " EEUU"
+    ]
 
-# limpiar columnas
-df.columns = df.columns.str.strip()
-df.columns = df.columns.str.replace(" ", "_")
+    df_list = []
 
-# ---------------------------------------------------
-# FILTROS INTERCOMPAÑIAS (EXCLUIR)
-# ---------------------------------------------------
+    for sheet in sheets:
+        temp = pd.read_excel(url, sheet_name=sheet, header=1)
+        temp["Pais"] = sheet.strip()
+        df_list.append(temp)
+
+    df = pd.concat(df_list, ignore_index=True)
+
+    return df
+
+df = load_data()
+
+# -----------------------------
+# LIMPIEZA
+# -----------------------------
+
+df["Cliente"] = df["Cliente"].astype(str)
+df["SALDO"] = pd.to_numeric(df["SALDO"], errors="coerce")
+df["Dias"] = pd.to_numeric(df["Dias"], errors="coerce")
+
+# -----------------------------
+# EXCLUIR INTERCOMPANY
+# -----------------------------
 
 excluir = [
 "TRADIOH LLC",
@@ -69,215 +77,134 @@ excluir = [
 
 df = df[~df["Cliente"].isin(excluir)]
 
-# ---------------------------------------------------
-# FECHAS Y CÁLCULOS
-# ---------------------------------------------------
+# -----------------------------
+# FILTROS
+# -----------------------------
 
-df["Fecha_vencimiento"] = pd.to_datetime(df["Fecha_vencimiento"], errors="coerce")
-df["Fecha_factura"] = pd.to_datetime(df["Fecha_factura"], errors="coerce")
+st.sidebar.header("Filtros")
 
-hoy = pd.to_datetime(datetime.today())
-
-df["dias_atraso"] = (hoy - df["Fecha_vencimiento"]).dt.days
-df["dias_atraso"] = df["dias_atraso"].apply(lambda x: x if x > 0 else 0)
-
-df["Estado"] = df["dias_atraso"].apply(
-lambda x:
-"🔴 Mora" if x>0 else "🟢 Al día"
+anio = st.sidebar.multiselect(
+    "Año",
+    options=sorted(df["Año"].dropna().unique()),
+    default=df["Año"].dropna().unique()
 )
 
-# ---------------------------------------------------
-# HEADER FILTROS
-# ---------------------------------------------------
+pais = st.sidebar.multiselect(
+    "País",
+    options=df["Pais"].unique(),
+    default=df["Pais"].unique()
+)
 
-col1,col2 = st.columns(2)
+mes = st.sidebar.multiselect(
+    "Mes",
+    options=sorted(df["Mes"].dropna().unique()),
+    default=df["Mes"].dropna().unique()
+)
 
-with col1:
+cliente = st.sidebar.multiselect(
+    "Cliente",
+    options=df["Cliente"].unique()
+)
 
-    pais = st.multiselect(
-        "País",
-        df["Pais"].unique(),
-        default=df["Pais"].unique()
-    )
+df_f = df[
+    (df["Año"].isin(anio)) &
+    (df["Pais"].isin(pais)) &
+    (df["Mes"].isin(mes))
+]
 
-with col2:
+if cliente:
+    df_f = df_f[df_f["Cliente"].isin(cliente)]
 
-    fechas = st.date_input(
-        "Rango de fechas",
-        []
-    )
-
-df = df[df["Pais"].isin(pais)]
-
-# ---------------------------------------------------
+# -----------------------------
 # KPIs
-# ---------------------------------------------------
+# -----------------------------
 
-cartera_total = df["Valor_USD"].sum()
+total_cartera = df_f["SALDO"].sum()
 
-vencido = df[df["dias_atraso"]>0]["Valor_USD"].sum()
+vencido = df_f[df_f["Dias"] > 0]["SALDO"].sum()
 
-al_dia = df[df["dias_atraso"]==0]["Valor_USD"].sum()
+aldia = df_f[df_f["Dias"] <= 0]["SALDO"].sum()
 
-promedio_dias = df["dias_atraso"].mean()
+mora = (vencido / total_cartera * 100) if total_cartera > 0 else 0
 
-porcentaje_mora = (vencido / cartera_total)*100 if cartera_total>0 else 0
+col1, col2, col3, col4 = st.columns(4)
 
-k1,k2,k3,k4,k5 = st.columns(5)
+col1.metric("Cartera Total", f"${total_cartera:,.0f}")
+col2.metric("Cartera Vencida", f"${vencido:,.0f}")
+col3.metric("Cartera al día", f"${aldia:,.0f}")
+col4.metric("% Mora", f"{mora:.2f}%")
 
-k1.metric("Cartera Total", f"${cartera_total:,.0f}")
-
-k2.metric("Total Vencido", f"${vencido:,.0f}")
-
-k3.metric("Total al día", f"${al_dia:,.0f}")
-
-k4.metric("Promedio días atraso", f"{promedio_dias:.1f}")
-
-k5.metric("% Mora", f"{porcentaje_mora:.1f}%")
-
-# ---------------------------------------------------
+# -----------------------------
 # RESUMEN POR PAIS
-# ---------------------------------------------------
+# -----------------------------
 
-st.subheader("Resumen por país")
+st.subheader("Resumen por País")
 
-resumen = df.groupby("Pais").agg(
-clientes=("Cliente","nunique"),
-total=("Valor_USD","sum"),
-vencido=("dias_atraso",lambda x: (x>0).sum())
+resumen = df_f.groupby("Pais").agg(
+    Clientes=("Cliente","nunique"),
+    Total_Cartera=("SALDO","sum"),
+    Vencido=("SALDO",lambda x: x[df_f["Dias"]>0].sum())
 ).reset_index()
 
-st.dataframe(resumen,use_container_width=True)
+st.dataframe(resumen, use_container_width=True)
 
-# ---------------------------------------------------
-# TABLA PRINCIPAL CARTERA
-# ---------------------------------------------------
+# -----------------------------
+# GRAFICA CARTERA POR PAIS
+# -----------------------------
 
-st.subheader("Cartera de clientes")
+st.subheader("Distribución de Cartera por País")
 
-tabla = df[[
+fig = px.pie(
+    df_f,
+    values="SALDO",
+    names="Pais",
+    hole=0.5
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# -----------------------------
+# ANTIGÜEDAD CARTERA
+# -----------------------------
+
+st.subheader("Antigüedad de Cartera")
+
+def bucket(d):
+    if pd.isna(d):
+        return "Al día"
+    if d <= 30:
+        return "1-30"
+    if d <= 60:
+        return "31-60"
+    if d <= 90:
+        return "61-90"
+    return "+90"
+
+df_f["Rango"] = df_f["Dias"].apply(bucket)
+
+fig2 = px.bar(
+    df_f,
+    x="Rango",
+    y="SALDO",
+    color="Rango"
+)
+
+st.plotly_chart(fig2, use_container_width=True)
+
+# -----------------------------
+# TABLA PRINCIPAL
+# -----------------------------
+
+st.subheader("Tabla de Cartera")
+
+tabla = df_f[[
 "Cliente",
 "Pais",
 "Moneda",
-"Valor_Original",
-"Valor_USD",
-"Fecha_vencimiento",
-"dias_atraso",
-"Estado",
-"Notas_credito",
-"Saldo_neto"
+"SALDO",
+"Fecha de vencimiento",
+"Dias",
+"Estado"
 ]]
 
-def color_estado(val):
-    if val>60:
-        return "background-color:red"
-    elif val>30:
-        return "background-color:orange"
-    elif val>0:
-        return "background-color:yellow"
-    else:
-        return "background-color:green"
-
-tabla_style = tabla.style.applymap(color_estado, subset=["dias_atraso"])
-
-st.dataframe(tabla_style,use_container_width=True)
-
-# ---------------------------------------------------
-# GRÁFICA 1 PIE CARTERA POR PAIS
-# ---------------------------------------------------
-
-st.subheader("Distribución de cartera por país")
-
-fig = px.pie(
-df,
-values="Valor_USD",
-names="Pais",
-hole=0.5
-)
-
-st.plotly_chart(fig,use_container_width=True)
-
-# ---------------------------------------------------
-# GRAFICA 2 VENCIDO VS AL DIA
-# ---------------------------------------------------
-
-estado = df.copy()
-
-estado["tipo"] = estado["dias_atraso"].apply(
-lambda x: "Vencido" if x>0 else "Al día"
-)
-
-graf2 = estado.groupby(["Pais","tipo"])["Valor_USD"].sum().reset_index()
-
-fig2 = px.bar(
-graf2,
-x="Pais",
-y="Valor_USD",
-color="tipo",
-barmode="group"
-)
-
-st.plotly_chart(fig2,use_container_width=True)
-
-# ---------------------------------------------------
-# GRAFICA 3 ANTIGÜEDAD CARTERA
-# ---------------------------------------------------
-
-bins = [0,30,60,90,9999]
-
-labels = ["1-30","31-60","61-90","+90"]
-
-df["rango"] = pd.cut(df["dias_atraso"],bins=bins,labels=labels)
-
-antig = df.groupby("rango")["Valor_USD"].sum().reset_index()
-
-fig3 = px.bar(
-antig,
-x="rango",
-y="Valor_USD",
-color="rango"
-)
-
-st.plotly_chart(fig3,use_container_width=True)
-
-# ---------------------------------------------------
-# GRAFICA 4 EVOLUCIÓN MENSUAL
-# ---------------------------------------------------
-
-df["mes"] = df["Fecha_factura"].dt.to_period("M").astype(str)
-
-evol = df.groupby("mes")["Valor_USD"].sum().reset_index()
-
-fig4 = px.line(
-evol,
-x="mes",
-y="Valor_USD"
-)
-
-st.plotly_chart(fig4,use_container_width=True)
-
-# ---------------------------------------------------
-# SEMÁFORO CLIENTES
-# ---------------------------------------------------
-
-st.subheader("Semáforo de clientes")
-
-def categoria(x):
-
-    if x==0:
-        return "🟢 Al día"
-
-    elif x<=30:
-        return "🟡 1-30"
-
-    elif x<=60:
-        return "🟠 31-60"
-
-    else:
-        return "🔴 +60"
-
-df["categoria"]=df["dias_atraso"].apply(categoria)
-
-sem = df.groupby("categoria")["Cliente"].nunique().reset_index()
-
-st.dataframe(sem)
+st.dataframe(tabla, use_container_width=True)
